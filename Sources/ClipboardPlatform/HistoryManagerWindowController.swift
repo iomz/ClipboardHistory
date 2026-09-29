@@ -14,6 +14,8 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
     private let tableView = NSTableView()
     private let emptyLabel = NSTextField(wrappingLabelWithString: "")
     private let previewView = NSTextView()
+    private let detailPreviewImage = NSImageView()
+    private var detailPreviewImageHeight: NSLayoutConstraint!
     private let detailSourceImage = NSImageView()
     private let detailSourceLabel = NSTextField(labelWithString: "")
     private let detailTypeLabel = NSTextField(labelWithString: "")
@@ -157,6 +159,9 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
         pane.translatesAutoresizingMaskIntoConstraints = false
         detailSourceImage.imageScaling = .scaleProportionallyUpOrDown
         detailSourceImage.translatesAutoresizingMaskIntoConstraints = false
+        detailPreviewImage.imageScaling = .scaleProportionallyUpOrDown
+        detailPreviewImage.translatesAutoresizingMaskIntoConstraints = false
+        detailPreviewImage.isHidden = true
         detailSourceLabel.font = .systemFont(ofSize: 14, weight: .semibold)
         detailTypeLabel.textColor = .secondaryLabelColor
         detailDateLabel.textColor = .secondaryLabelColor
@@ -197,8 +202,10 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
         pane.addSubview(detailSourceLabel)
         pane.addSubview(detailTypeLabel)
         pane.addSubview(detailDateLabel)
+        pane.addSubview(detailPreviewImage)
         pane.addSubview(previewScroll)
         pane.addSubview(buttons)
+        detailPreviewImageHeight = detailPreviewImage.heightAnchor.constraint(equalToConstant: 0)
         NSLayoutConstraint.activate([
             detailSourceImage.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 18),
             detailSourceImage.topAnchor.constraint(equalTo: pane.topAnchor, constant: 18),
@@ -211,9 +218,13 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
             detailTypeLabel.topAnchor.constraint(equalTo: detailSourceImage.bottomAnchor, constant: 12),
             detailDateLabel.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 18),
             detailDateLabel.topAnchor.constraint(equalTo: detailTypeLabel.bottomAnchor, constant: 4),
+            detailPreviewImage.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 18),
+            detailPreviewImage.trailingAnchor.constraint(equalTo: pane.trailingAnchor, constant: -18),
+            detailPreviewImage.topAnchor.constraint(equalTo: detailDateLabel.bottomAnchor, constant: 14),
+            detailPreviewImageHeight,
             previewScroll.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 18),
             previewScroll.trailingAnchor.constraint(equalTo: pane.trailingAnchor, constant: -18),
-            previewScroll.topAnchor.constraint(equalTo: detailDateLabel.bottomAnchor, constant: 14),
+            previewScroll.topAnchor.constraint(equalTo: detailPreviewImage.bottomAnchor),
             previewScroll.bottomAnchor.constraint(equalTo: buttons.topAnchor, constant: -14),
             buttons.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 18),
             buttons.trailingAnchor.constraint(lessThanOrEqualTo: pane.trailingAnchor, constant: -18),
@@ -308,6 +319,9 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
             detailTypeLabel.stringValue = ""
             detailDateLabel.stringValue = ""
             previewView.string = ""
+            detailPreviewImage.image = nil
+            detailPreviewImage.isHidden = true
+            detailPreviewImageHeight.constant = 0
             favoriteButton.title = "Favorite"
             favoriteButton.isEnabled = false
             copyButton.isEnabled = false
@@ -315,11 +329,15 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
             deleteButton.isEnabled = false
             return
         }
+        let preview = ClipboardEntryPreviewModel(entry: entry)
         detailSourceImage.image = icon(for: entry)
         detailSourceLabel.stringValue = entry.sourceApplication.displayName ?? "Unknown app"
-        detailTypeLabel.stringValue = "\(entry.typeSummary) · \(entry.compactTypeLabel)"
+        detailTypeLabel.stringValue = preview.typeDescription
         detailDateLabel.stringValue = "Captured \(dateFormatter.string(from: entry.lastCapturedAt))"
-        previewView.string = entry.plainText ?? entry.preview
+        detailPreviewImage.image = preview.image
+        detailPreviewImage.isHidden = preview.image == nil
+        detailPreviewImageHeight.constant = preview.image == nil ? 0 : 150
+        previewView.string = preview.text
         favoriteButton.title = entry.isFavorite ? "Unfavorite" : "Favorite"
         favoriteButton.isEnabled = true
         copyButton.isEnabled = true

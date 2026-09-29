@@ -8,8 +8,9 @@ Current facts to preserve:
 
 - Local menu-bar utility when manager closed; normal Dock/Cmd-Tab app while History Manager is open.
 - Distinct UI roles: transient pointer-relative fast picker and normal persistent History Manager.
+- Fast-picker row hover waits 400 ms, then shows a focus-neutral read-only preview using shared Manager preview content; hover never changes keyboard selection.
 - Option-Command-V opens picker. Search remains first-class; arrows and Ctrl-N/Ctrl-P navigate without wrapping.
-- Enter restores rich/default representations and pastes; Shift-Enter restores plain text and pastes; Escape dismisses.
+- Enter restores rich/default representations and pastes; Shift-Enter restores plain text and pastes. Holding Shift previews TXT badges only for entries eligible for that same plain-text restore; Escape dismisses.
 - One history event groups multiple pasteboard items, each with multiple original typed representations. Do not flatten rich content to text.
 - Content-equivalent recapture promotes existing entry, retains identity/favorite, updates recency and latest source metadata.
 - Picker omits source text for density; manager shows source metadata and owns management actions. Both use one repository/search implementation.
@@ -28,6 +29,10 @@ Current facts to preserve:
 
 `Scripts/build-app.sh` builds the Release arm64 `.app` for macOS 26 and assembles `build/Clipboard History.app`. This Command Line Tools-only setup needs SwiftPM's deprecated native build backend; the script selects it. Run `Scripts/test-core.sh` and `Scripts/test-representations.sh`. Representation tests use unique named pasteboards, temporary stores, synthetic fixtures, and exact byte comparison. They never read `NSPasteboard.general`.
 
+Product version follows Semantic Versioning in `CFBundleShortVersionString`; `CFBundleVersion` is an independent incrementing macOS build number. Current product version is 0.2.0 (build 2).
+
+Ordinary launch opens History Manager. A future background/login launcher may pass `--background` to start capture silently; no login item is configured. When already running, AppKit reopen events show the existing Manager instance.
+
 The app status menu includes **Clipboard Representation Report…**. For manual interoperability tests, use only disposable content:
 
 1. Copy a disposable text file, then a multi-selection of disposable files in Finder.
@@ -40,15 +45,15 @@ For an image item advertising both a file URL and image data, report shows `MIX`
 
 ## Development signing / Accessibility TCC
 
-Observed on macOS 26.6.2: rebuilt development app once lost effective Accessibility authorization. Removing its existing Accessibility entry, relaunching, invoking paste to request access, allowing, and relaunching restored synthetic paste. Rebuilt development bundles may require repeating that recovery. Do not weaken automatic paste to avoid the permission.
+Observed on macOS 26.6.2: an earlier ad-hoc rebuild lost effective Accessibility authorization. On iomz's current development setup, a stably Apple Development-signed build then retained the existing grant across a source change and rebuild; synthetic paste succeeded without touching Accessibility settings. This is an empirical result only for the current certificate/team, bundle identifier, and Mac—not a guarantee across identity, signing, bundle, or machine changes. Do not weaken automatic paste to avoid the permission.
 
 Signing inspection of the current development app found:
 
 - Bundle identifier in `Info.plist`: `com.iomz.ClipboardHistory`.
-- Swift-linked executable: ad-hoc signature, identifier `ClipboardHistory`, no Team ID; designated requirement is cdhash-based. The enclosing `.app` was not sealed/bound to its Info.plist.
-- One valid local Apple Development signing identity is available. Using that identity would bind builds to a user-specific certificate/team. It has **not** been selected or used; ask iomz before signing with it. No paid Developer ID distribution workflow is required for this local diagnostic/build task.
+- The build script signs the completed app bundle with the sole installed Apple Development identity when exactly one exists. If none exists, it explicitly falls back to ad-hoc signing. If multiple exist, it refuses ambiguous selection unless `CLIPHISTORY_SIGNING_IDENTITY` is set to the intended local identity SHA-1. Keep that value local/untracked; never add certificate/key material, Team ID, or identity hashes to the repository.
+- This local Apple Development signature is for repeatable development/TCC testing only. No distribution, notarization, or App Store workflow is configured.
 
-Expected: a stable Apple Development signature and bundle identifier should provide a stable TCC code identity across rebuilds, but this is unproven until iomz verifies authorization survives a rebuild. Do not claim a fix until tested.
+Expected: an Apple Development signature and stable bundle identifier should produce a stable designated requirement across rebuilds. iomz empirically verified TCC persistence for the current development setup as described above; repeat validation if signing identity, Team, bundle identifier, distribution signing, or Mac changes.
 
 ## Deferred / not planned
 

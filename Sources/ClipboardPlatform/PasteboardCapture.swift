@@ -38,6 +38,14 @@ public struct PasteboardSnapshot {
     }
 }
 
+public enum PlainTextPastePolicy {
+    /// Non-text snapshots and empty text fail closed; never trigger a rich-paste fallback.
+    public static func text(from snapshot: PasteboardSnapshot?) -> String? {
+        guard let text = snapshot?.entry.plainText, !text.isEmpty else { return nil }
+        return text
+    }
+}
+
 /// Shared capture/normalization path for live monitoring and diagnostics/tests.
 public enum PasteboardSnapshotter {
     public static let supportedTypeIdentifiers: Set<String> = [
@@ -156,12 +164,23 @@ public final class PasteboardCapture {
 }
 
 public enum PasteboardRestorer {
+    public static func plainText(for entry: ClipboardEntry) -> String? {
+        guard let text = entry.plainText, !text.isEmpty else { return nil }
+        return text
+    }
+
+    @discardableResult
+    public static func restorePlainText(_ text: String, to pasteboard: NSPasteboard = .general) -> Bool {
+        guard !text.isEmpty else { return false }
+        pasteboard.clearContents()
+        return pasteboard.setString(text, forType: .string)
+    }
+
     @discardableResult
     public static func restore(_ entry: ClipboardEntry, plainTextOnly: Bool, to pasteboard: NSPasteboard = .general) -> Bool {
         if plainTextOnly {
-            guard let text = entry.plainText else { return false }
-            pasteboard.clearContents()
-            return pasteboard.setString(text, forType: .string)
+            guard let text = plainText(for: entry) else { return false }
+            return restorePlainText(text, to: pasteboard)
         }
         let items = entry.pasteboardItems.sorted { $0.ordinal < $1.ordinal }.map { modelItem -> NSPasteboardItem in
             let item = NSPasteboardItem()

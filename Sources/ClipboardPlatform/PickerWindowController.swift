@@ -3,8 +3,25 @@ import ClipboardCore
 import Foundation
 import OSLog
 
-public final class PickerWindowController: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
+public struct PickerBadgePreviewState {
+    public private(set) var isShiftDown = false
+
+    public init() {}
+
+    public mutating func updateShift(isDown: Bool) { isShiftDown = isDown }
+    public mutating func reset() { isShiftDown = false }
+
+    public func badge(for entry: ClipboardEntry) -> String {
+        guard isShiftDown, PasteboardRestorer.plainText(for: entry) != nil else {
+            return entry.compactTypeLabel
+        }
+        return "TXT"
+    }
+}
+
+public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     private static let pasteLogger = Logger(subsystem: "com.iomz.ClipboardHistory", category: "Paste")
+    private static let badgeViewTag = 0x434842
     private let history: ClipboardHistory
     private let capture: PasteboardCapture
     private let onFeedback: (String) -> Void
@@ -18,6 +35,17 @@ public final class PickerWindowController: NSObject, NSTableViewDataSource, NSTa
     private var activationObserver: NSObjectProtocol?
     private var historyObserver: NSObjectProtocol?
     private var keyMonitor: Any?
+    private var isDismissing = false
+    private var badgePreview = PickerBadgePreviewState()
+    private var hoverWorkItem: DispatchWorkItem?
+    private var hoverDismissWorkItem: DispatchWorkItem?
+    private var hoverGeneration: UInt = 0
+    private var hoverDismissGeneration: UInt = 0
+    private var hoverRegion = PickerHoverRegionState()
+    private var scrollObserver: NSObjectProtocol?
+    private var hoverPreview: ClipboardEntryHoverPreview?
+
+    public var latestExternalApplication: NSRunningApplication? { lastExternalApplication }
 
     public init(history: ClipboardHistory, capture: PasteboardCapture, onFeedback: @escaping (String) -> Void) {
         self.history = history
@@ -28,6 +56,10 @@ public final class PickerWindowController: NSObject, NSTableViewDataSource, NSTa
             styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel], backing: .buffered, defer: true
         )
         super.init()
+        hoverPreview = ClipboardEntryHoverPreview(parentWindow: panel)
+        hoverPreview?.onPointerEntered = { [weak self] in self?.previewPointerEntered() }
+        hoverPreview?.onPointerExited = { [weak self] in self?.previewPointerExited() }
+        panel.delegate = self
         lastExternalApplication = NSWorkspace.shared.frontmostApplication
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
@@ -51,6 +83,8 @@ public final class PickerWindowController: NSObject, NSTableViewDataSource, NSTa
     deinit {
         if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
         if let historyObserver { NotificationCenter.default.removeObserver(historyObserver) }
+        if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
+        cancelHoverPreview()
         removeKeyMonitor()
     }
 
@@ -58,6 +92,8 @@ public final class PickerWindowController: NSObject, NSTableViewDataSource, NSTa
         let frontmost = NSWorkspace.shared.frontmostApplication
         destinationApplication = frontmost?.processIdentifier == NSRunningApplication.current.processIdentifier
             ? lastExternalApplication : frontmost
+        badgePreview.reset()
+        badgePreview.updateShift(isDown: NSEvent.modifierFlags.contains(.shift))
         Self.pasteLogger.info("picker opened destinationPID=\(self.destinationApplication?.processIdentifier ?? 0, privacy: .public) frontmostWasSelf=\(frontmost?.processIdentifier == NSRunningApplication.current.processIdentifier, privacy: .public)")
         reloadRows()
         positionNearPointer()
@@ -103,6 +139,10 @@ public final class PickerWindowController: NSObject, NSTableViewDataSource, NSTa
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.contentView.postsBoundsChangedNotifications = true
+        scrollObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification, object: scroll.contentView, queue: .main
+        ) { [weak self] _ in self?.cancelHoverPreview() }
 
         countLabel.textColor = .secondaryLabelColor
         countLabel.font = .systemFont(ofSize: 11)
@@ -138,6 +178,7 @@ public final class PickerWindowController: NSObject, NSTableViewDataSource, NSTa
     }
 
     private func reloadRows(query: String = "", preservingSelection: Bool = false) {
+        cancelHoverPreview()
         let selectedID = preservingSelection && rows.indices.contains(tableView.selectedRow)
             ? rows[tableView.selectedRow].id : nil
         rows = history.search(query)
@@ -159,11 +200,16 @@ public final class PickerWindowController: NSObject, NSTableViewDataSource, NSTa
     public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard rows.indices.contains(row) else { return nil }
         let entry = rows[row]
-        let cell = NSTableCellView()
+        let cell = PickerHoverRowCell()
+        cell.onHover = { [weak self] isInside in
+            if isInside { self?.hoveredRowEntered(entry.id) }
+            else { self?.hoveredRowExited(entry.id) }
+        }
         let title = NSTextField(labelWithString: entry.preview.replacingOccurrences(of: "\n", with: " "))
         title.font = .systemFont(ofSize: 13)
         title.lineBreakMode = .byTruncatingTail
-        let badge = NSTextField(labelWithString: entry.compactTypeLabel)
+        let badge = NSTextField(labelWithString: badgePreview.badge(for: entry))
+        badge.tag = Self.badgeViewTag
         badge.font = .systemFont(ofSize: 9, weight: .semibold)
         badge.textColor = .secondaryLabelColor
         badge.drawsBackground = true
@@ -194,8 +240,15 @@ public final class PickerWindowController: NSObject, NSTableViewDataSource, NSTa
 
     private func installKeyMonitor() {
         removeKeyMonitor()
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
             guard let self, self.panel.isKeyWindow else { return event }
+            if event.type == .flagsChanged {
+                let shiftIsDown = event.modifierFlags.contains(.shift)
+                guard self.badgePreview.isShiftDown != shiftIsDown else { return event }
+                self.badgePreview.updateShift(isDown: shiftIsDown)
+                self.reloadBadgeRowsPreservingSelection()
+                return event
+            }
             let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if modifiers.contains(.control), event.keyCode == 45 { self.moveSelection(1); return nil } // Ctrl-N
             if modifiers.contains(.control), event.keyCode == 35 { self.moveSelection(-1); return nil } // Ctrl-P
@@ -214,6 +267,93 @@ public final class PickerWindowController: NSObject, NSTableViewDataSource, NSTa
 
     private func removeKeyMonitor() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
+    }
+
+    private func reloadBadgeRowsPreservingSelection() {
+        let visibleRows = tableView.rows(in: tableView.visibleRect)
+        guard visibleRows.location != NSNotFound else { return }
+        for row in visibleRows.location..<NSMaxRange(visibleRows) where rows.indices.contains(row) {
+            guard let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false),
+                  let badge = cell.viewWithTag(Self.badgeViewTag) as? NSTextField else { continue }
+            badge.stringValue = badgePreview.badge(for: rows[row])
+        }
+    }
+
+    private func hoveredRowEntered(_ entryID: UUID) {
+        guard panel.isVisible, rows.contains(where: { $0.id == entryID }) else { return }
+        let isNewTarget = hoverRegion.entryID != entryID
+        if isNewTarget {
+            cancelHoverPreview()
+            hoverRegion.enterRow(entryID)
+        } else {
+            hoverRegion.enterRow(entryID)
+            cancelHoverDismissal()
+            if hoverPreview?.isVisible == true || hoverWorkItem != nil { return }
+        }
+        hoverWorkItem?.cancel()
+        hoverGeneration &+= 1
+        let generation = hoverGeneration
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.panel.isVisible, self.hoverGeneration == generation,
+                  self.hoverRegion.entryID == entryID, self.hoverRegion.pointerOverRow,
+                  let row = self.rows.firstIndex(where: { $0.id == entryID }) else { return }
+            let visibleRows = self.tableView.rows(in: self.tableView.visibleRect)
+            guard visibleRows.location != NSNotFound,
+                  row >= visibleRows.location, row < NSMaxRange(visibleRows) else { return }
+            let rowRect = self.tableView.convert(self.tableView.rect(ofRow: row), to: nil)
+            let screenRect = self.panel.convertToScreen(rowRect)
+            self.hoverWorkItem = nil
+            self.hoverPreview?.show(model: ClipboardEntryPreviewModel(entry: self.rows[row]), anchoredTo: screenRect)
+        }
+        hoverWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: workItem)
+    }
+
+    private func hoveredRowExited(_ entryID: UUID) {
+        guard hoverRegion.exitRow(entryID) else { return }
+        if hoverPreview?.isVisible == true {
+            scheduleHoverDismissal()
+        } else {
+            cancelHoverPreview()
+        }
+    }
+
+    private func previewPointerEntered() {
+        guard hoverPreview?.isVisible == true, hoverRegion.entryID != nil else { return }
+        hoverRegion.enterPreview()
+        cancelHoverDismissal()
+    }
+
+    private func previewPointerExited() {
+        guard hoverPreview?.isVisible == true, hoverRegion.entryID != nil else { return }
+        hoverRegion.exitPreview()
+        scheduleHoverDismissal()
+    }
+
+    private func scheduleHoverDismissal() {
+        cancelHoverDismissal()
+        let generation = hoverDismissGeneration
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.hoverDismissGeneration == generation, self.hoverRegion.shouldDismiss else { return }
+            self.cancelHoverPreview()
+        }
+        hoverDismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: workItem)
+    }
+
+    private func cancelHoverDismissal() {
+        hoverDismissWorkItem?.cancel()
+        hoverDismissWorkItem = nil
+        hoverDismissGeneration &+= 1
+    }
+
+    private func cancelHoverPreview() {
+        hoverWorkItem?.cancel()
+        hoverWorkItem = nil
+        hoverGeneration &+= 1
+        cancelHoverDismissal()
+        hoverRegion.reset()
+        hoverPreview?.hide()
     }
 
     private func moveSelection(_ amount: Int) {
@@ -295,12 +435,50 @@ public final class PickerWindowController: NSObject, NSTableViewDataSource, NSTa
     }
 
     private func dismiss(restoreDestination: Bool = false) {
+        guard !isDismissing else { return }
+        isDismissing = true
         let destination = destinationApplication
         removeKeyMonitor()
+        badgePreview.reset()
+        cancelHoverPreview()
         panel.orderOut(nil)
         destinationApplication = nil
+        isDismissing = false
         if restoreDestination, let destination, !destination.isTerminated {
             _ = destination.activate(options: [])
         }
+    }
+
+    public func windowDidResignKey(_ notification: Notification) {
+        guard notification.object as? NSWindow === panel, panel.isVisible, !isDismissing else { return }
+        dismiss()
+    }
+}
+
+private final class PickerHoverRowCell: NSTableCellView {
+    var onHover: ((Bool) -> Void)?
+    private var hoverTrackingArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        onHover?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        onHover?(false)
     }
 }

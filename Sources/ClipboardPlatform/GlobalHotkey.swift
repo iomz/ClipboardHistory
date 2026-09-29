@@ -8,9 +8,16 @@ public final class GlobalHotkey {
     private var hotKey: EventHotKeyRef?
     private var handler: EventHandlerRef?
     private let action: () -> Void
-    private let identifier = EventHotKeyID(signature: OSType(0x434C4950), id: 1)
+    private let identifier: EventHotKeyID
+    private let keyCode: UInt32
+    private let modifiers: UInt32
 
-    public init(action: @escaping () -> Void) { self.action = action }
+    public init(id: UInt32, keyCode: UInt32, modifiers: UInt32, action: @escaping () -> Void) {
+        self.identifier = EventHotKeyID(signature: OSType(0x434C4950), id: id)
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+        self.action = action
+    }
 
     public func register() -> OSStatus {
         var eventSpec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -20,7 +27,7 @@ public final class GlobalHotkey {
         )
         guard installStatus == noErr else { return installStatus }
         return RegisterEventHotKey(
-            UInt32(kVK_ANSI_V), UInt32(cmdKey | optionKey), identifier,
+            keyCode, modifiers, identifier,
             GetApplicationEventTarget(), 0, &hotKey
         )
     }
@@ -39,8 +46,9 @@ public final class GlobalHotkey {
             event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
             nil, MemoryLayout<EventHotKeyID>.size, nil, &received
         )
-        guard status == noErr, received.id == 1 else { return OSStatus(eventNotHandledErr) }
+        guard status == noErr, received.signature == OSType(0x434C4950) else { return OSStatus(eventNotHandledErr) }
         let instance = Unmanaged<GlobalHotkey>.fromOpaque(userData).takeUnretainedValue()
+        guard received.id == instance.identifier.id else { return OSStatus(eventNotHandledErr) }
         DispatchQueue.main.async { instance.action() }
         return noErr
     }

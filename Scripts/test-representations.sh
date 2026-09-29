@@ -12,6 +12,7 @@ swiftc -emit-module -emit-library -module-name ClipboardCore -target arm64-apple
 swiftc -emit-module -emit-library -module-name ClipboardPlatform -target arm64-apple-macosx26.0 -sdk "$SDK" \
   -I build/tests -L build/tests -lClipboardCore \
   Sources/ClipboardPlatform/PasteboardCapture.swift \
+  Sources/ClipboardPlatform/ClipboardEntryPreview.swift \
   Sources/ClipboardPlatform/GlobalHotkey.swift \
   Sources/ClipboardPlatform/PickerWindowController.swift \
   Sources/ClipboardPlatform/HistoryManagerWindowController.swift \
