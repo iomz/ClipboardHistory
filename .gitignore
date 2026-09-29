@@ -1,0 +1,21 @@
+# macOS / editor noise
+.DS_Store
+
+# SwiftPM and generated app/test output
+.build/
+.swiftpm/
+DerivedData/
+/build/
+
+# Reverse-engineering source material and legacy binary; keep local, never commit
+/Clipboard History.app/
+/docs/
+
+# Local app state, diagnostics, and disposable fixtures
+/ClipboardHistory/Entries/
+/runtime-data/
+/logs/
+*.log
+*.sqlite
+*.sqlite-*
+*.db

@@ -1,0 +1,306 @@
+import AppKit
+import ClipboardCore
+import Foundation
+import OSLog
+
+public final class PickerWindowController: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
+    private static let pasteLogger = Logger(subsystem: "com.iomz.ClipboardHistory", category: "Paste")
+    private let history: ClipboardHistory
+    private let capture: PasteboardCapture
+    private let onFeedback: (String) -> Void
+    private let panel: NSPanel
+    private let searchField = NSSearchField()
+    private let tableView = NSTableView()
+    private let countLabel = NSTextField(labelWithString: "")
+    private var rows: [ClipboardEntry] = []
+    private var destinationApplication: NSRunningApplication?
+    private var lastExternalApplication: NSRunningApplication?
+    private var activationObserver: NSObjectProtocol?
+    private var historyObserver: NSObjectProtocol?
+    private var keyMonitor: Any?
+
+    public init(history: ClipboardHistory, capture: PasteboardCapture, onFeedback: @escaping (String) -> Void) {
+        self.history = history
+        self.capture = capture
+        self.onFeedback = onFeedback
+        self.panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 520),
+            styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel], backing: .buffered, defer: true
+        )
+        super.init()
+        lastExternalApplication = NSWorkspace.shared.frontmostApplication
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            let app = NSWorkspace.shared.frontmostApplication
+            if app?.processIdentifier != NSRunningApplication.current.processIdentifier {
+                self.lastExternalApplication = app
+            }
+        }
+        historyObserver = NotificationCenter.default.addObserver(
+            forName: .clipboardHistoryDidChange, object: history, queue: .main
+        ) { [weak self] _ in
+            guard let self, self.panel.isVisible else { return }
+            self.reloadRows(query: self.searchField.stringValue, preservingSelection: true)
+        }
+        configurePanel()
+        configureContent()
+    }
+
+    deinit {
+        if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
+        if let historyObserver { NotificationCenter.default.removeObserver(historyObserver) }
+        removeKeyMonitor()
+    }
+
+    public func show() {
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        destinationApplication = frontmost?.processIdentifier == NSRunningApplication.current.processIdentifier
+            ? lastExternalApplication : frontmost
+        Self.pasteLogger.info("picker opened destinationPID=\(self.destinationApplication?.processIdentifier ?? 0, privacy: .public) frontmostWasSelf=\(frontmost?.processIdentifier == NSRunningApplication.current.processIdentifier, privacy: .public)")
+        reloadRows()
+        positionNearPointer()
+        panel.makeKeyAndOrderFront(nil)
+        searchField.stringValue = ""
+        searchField.becomeFirstResponder()
+        installKeyMonitor()
+    }
+
+    private func configurePanel() {
+        panel.title = "Clipboard History"
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.level = .floating
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.backgroundColor = .windowBackgroundColor
+        panel.hasShadow = true
+    }
+
+    private func configureContent() {
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 520))
+        searchField.placeholderString = "Search clipboard history"
+        searchField.delegate = self
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("entry"))
+        column.width = 468
+        tableView.addTableColumn(column)
+        tableView.headerView = nil
+        tableView.rowHeight = 38
+        tableView.intercellSpacing = NSSize(width: 0, height: 0)
+        tableView.selectionHighlightStyle = .regular
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.doubleAction = #selector(activateRichPaste)
+        tableView.target = self
+        let scroll = NSScrollView()
+        scroll.documentView = tableView
+        scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+
+        countLabel.textColor = .secondaryLabelColor
+        countLabel.font = .systemFont(ofSize: 11)
+        countLabel.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(searchField)
+        root.addSubview(scroll)
+        root.addSubview(countLabel)
+        NSLayoutConstraint.activate([
+            searchField.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
+            searchField.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
+            searchField.topAnchor.constraint(equalTo: root.topAnchor, constant: 14),
+            scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 8),
+            scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
+            scroll.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 10),
+            scroll.bottomAnchor.constraint(equalTo: countLabel.topAnchor, constant: -8),
+            countLabel.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
+            countLabel.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
+        ])
+        panel.contentView = root
+    }
+
+    private func positionNearPointer() {
+        let pointer = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(pointer) }) ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let size = panel.frame.size
+        let gap: CGFloat = 18
+        // Prefer below/right of pointer; clamp to the pointer's display's usable frame.
+        var origin = NSPoint(x: pointer.x + gap, y: pointer.y - size.height - gap)
+        origin.x = min(max(origin.x, visible.minX), visible.maxX - size.width)
+        origin.y = min(max(origin.y, visible.minY), visible.maxY - size.height)
+        panel.setFrameOrigin(origin)
+    }
+
+    private func reloadRows(query: String = "", preservingSelection: Bool = false) {
+        let selectedID = preservingSelection && rows.indices.contains(tableView.selectedRow)
+            ? rows[tableView.selectedRow].id : nil
+        rows = history.search(query)
+        tableView.reloadData()
+        countLabel.stringValue = "\(rows.count) items · Return to paste · ⇧Return for plain text"
+        if let selectedID, let index = rows.firstIndex(where: { $0.id == selectedID }) {
+            tableView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+        } else if !rows.isEmpty {
+            tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        }
+    }
+
+    public func controlTextDidChange(_ notification: Notification) {
+        reloadRows(query: searchField.stringValue)
+    }
+
+    public func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
+
+    public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard rows.indices.contains(row) else { return nil }
+        let entry = rows[row]
+        let cell = NSTableCellView()
+        let title = NSTextField(labelWithString: entry.preview.replacingOccurrences(of: "\n", with: " "))
+        title.font = .systemFont(ofSize: 13)
+        title.lineBreakMode = .byTruncatingTail
+        let badge = NSTextField(labelWithString: entry.compactTypeLabel)
+        badge.font = .systemFont(ofSize: 9, weight: .semibold)
+        badge.textColor = .secondaryLabelColor
+        badge.drawsBackground = true
+        badge.backgroundColor = .quaternaryLabelColor
+        badge.wantsLayer = true
+        badge.layer?.cornerRadius = 4
+        badge.alignment = .center
+        badge.setContentCompressionResistancePriority(.required, for: .horizontal)
+        badge.setContentHuggingPriority(.required, for: .horizontal)
+        let favorite = NSTextField(labelWithString: entry.isFavorite ? "★" : "")
+        favorite.font = .systemFont(ofSize: 10)
+        favorite.textColor = .tertiaryLabelColor
+        favorite.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let row = NSStackView(views: [badge, title, favorite])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+        row.translatesAutoresizingMaskIntoConstraints = false
+        title.translatesAutoresizingMaskIntoConstraints = false
+        cell.addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 10),
+            row.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -10),
+            row.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+        ])
+        return cell
+    }
+
+    private func installKeyMonitor() {
+        removeKeyMonitor()
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, self.panel.isKeyWindow else { return event }
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if modifiers.contains(.control), event.keyCode == 45 { self.moveSelection(1); return nil } // Ctrl-N
+            if modifiers.contains(.control), event.keyCode == 35 { self.moveSelection(-1); return nil } // Ctrl-P
+            switch event.keyCode {
+            case 53: self.dismiss(restoreDestination: true); return nil // Escape
+            case 126: self.moveSelection(-1); return nil
+            case 125: self.moveSelection(1); return nil
+            case 36, 76:
+                if event.modifierFlags.contains(.shift) { self.activatePlainPaste() }
+                else { self.activateRichPaste() }
+                return nil
+            default: return event
+            }
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
+    }
+
+    private func moveSelection(_ amount: Int) {
+        guard !rows.isEmpty else { return }
+        let current = max(tableView.selectedRow, 0)
+        let next = min(max(current + amount, 0), rows.count - 1)
+        tableView.selectRowIndexes(IndexSet(integer: next), byExtendingSelection: false)
+        tableView.scrollRowToVisible(next)
+    }
+
+    @objc private func activateRichPaste() { activate(plainTextOnly: false) }
+    private func activatePlainPaste() { activate(plainTextOnly: true) }
+
+    private func activate(plainTextOnly: Bool) {
+        guard rows.indices.contains(tableView.selectedRow) else { NSSound.beep(); return }
+        let selectedIndex = tableView.selectedRow
+        let entry = rows[selectedIndex]
+        Self.pasteLogger.info("paste activation started plainTextOnly=\(plainTextOnly, privacy: .public) selectedIndex=\(selectedIndex, privacy: .public)")
+        guard PasteboardRestorer.restore(entry, plainTextOnly: plainTextOnly) else {
+            Self.pasteLogger.error("paste restore failed")
+            onFeedback("Could not restore clipboard representation")
+            dismiss()
+            return
+        }
+        Self.pasteLogger.info("paste restore succeeded")
+        capture.noteOwnWrite()
+        let destination = destinationApplication
+        guard let destination, !destination.isTerminated else {
+            dismiss()
+            Self.pasteLogger.error("paste aborted: captured destination missing or terminated")
+            onFeedback("Clipboard restored. Paste manually with ⌘V.")
+            return
+        }
+        guard PasteCommand.ensureEventPostingAccess() else {
+            dismiss()
+            Self.pasteLogger.error("paste aborted: event-synthesizing access unavailable; clipboard remains restored")
+            onFeedback("Clipboard restored. Enable Clipboard History in System Settings › Privacy & Security › Accessibility, then try again.")
+            return
+        }
+        dismiss()
+        let targetPID = destination.processIdentifier
+        let wasAlreadyFrontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier == targetPID
+        let activationRequested = wasAlreadyFrontmost || destination.activate(options: [])
+        Self.pasteLogger.info("destination activation pid=\(targetPID, privacy: .public) alreadyFrontmost=\(wasAlreadyFrontmost, privacy: .public) requestAccepted=\(activationRequested, privacy: .public)")
+        guard activationRequested else {
+            Self.pasteLogger.error("paste aborted: destination activation request rejected")
+            onFeedback("Clipboard restored. Destination did not activate; paste manually with ⌘V.")
+            return
+        }
+        waitForDestinationAndPost(destination, attemptsRemaining: 60)
+    }
+
+    private func waitForDestinationAndPost(_ destination: NSRunningApplication, attemptsRemaining: Int) {
+        let targetPID = destination.processIdentifier
+        guard !destination.isTerminated else {
+            Self.pasteLogger.error("paste aborted: destination terminated during focus handoff")
+            onFeedback("Clipboard restored. Paste manually with ⌘V.")
+            return
+        }
+        let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        guard frontmostPID == targetPID else {
+            guard attemptsRemaining > 0 else {
+                Self.pasteLogger.error("paste aborted: destination did not become frontmost; observedPID=\(frontmostPID ?? 0, privacy: .public)")
+                onFeedback("Clipboard restored. Destination did not activate; paste manually with ⌘V.")
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.025) { [weak self] in
+                self?.waitForDestinationAndPost(destination, attemptsRemaining: attemptsRemaining - 1)
+            }
+            return
+        }
+        Self.pasteLogger.info("destination frontmost verified pid=\(targetPID, privacy: .public)")
+        guard PasteCommand.post(to: targetPID) else {
+            Self.pasteLogger.error("paste event creation failed targetPID=\(targetPID, privacy: .public)")
+            onFeedback("Clipboard restored. Paste manually with ⌘V.")
+            return
+        }
+        Self.pasteLogger.info("paste event pair dispatched targetPID=\(targetPID, privacy: .public)")
+    }
+
+    private func dismiss(restoreDestination: Bool = false) {
+        let destination = destinationApplication
+        removeKeyMonitor()
+        panel.orderOut(nil)
+        destinationApplication = nil
+        if restoreDestination, let destination, !destination.isTerminated {
+            _ = destination.activate(options: [])
+        }
+    }
+}
