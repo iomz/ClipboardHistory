@@ -3,13 +3,22 @@
     <channel>
         <title>The Clipboard</title>
         <item>
+            <title>0.4.1</title>
+            <pubDate>Sat, 10 Oct 2026 06:41:44 +0900</pubDate>
+            <sparkle:version>6</sparkle:version>
+            <sparkle:shortVersionString>0.4.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/iomz/TheClipboard/releases/download/v0.4.1/TheClipboard-0.4.1-arm64.dmg" length="9449687" type="application/octet-stream" sparkle:edSignature="xRY227iMdh8rg5GvhKbbzviCL7Wb+sfjxHfXhRajKZd0h/MdIl/WLjfEVEmsAAasrq81FBYPA0mnaKHMfV61Cw=="></enclosure>
+        </item>
+        <item>
             <title>0.4.0</title>
             <pubDate>Fri, 09 Oct 2026 22:05:53 +0900</pubDate>
             <sparkle:version>5</sparkle:version>
             <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/iomz/TheClipboard/releases/download/v0.4.0/TheClipboard-0.4.0-arm64.dmg" length="4702760" type="application/octet-stream" sparkle:edSignature="ytMt0TxL6UZyK5R+UYRnwV40+OZ8uHYV+iD7S5iChryj4uHEzHywhRtM+odKLKbQeBewTVOlrFrwGAp4RJr/BQ=="/>
+            <enclosure url="https://github.com/iomz/TheClipboard/releases/download/v0.4.0/TheClipboard-0.4.0-arm64.dmg" length="4702760" type="application/octet-stream" sparkle:edSignature="ytMt0TxL6UZyK5R+UYRnwV40+OZ8uHYV+iD7S5iChryj4uHEzHywhRtM+odKLKbQeBewTVOlrFrwGAp4RJr/BQ=="></enclosure>
         </item>
     </channel>
 </rss>
