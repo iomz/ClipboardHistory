@@ -8,9 +8,10 @@
 	<key>CFBundleName</key><string>The Clipboard</string>
 	<key>CFBundleDisplayName</key><string>The Clipboard</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
-	<key>CFBundleShortVersionString</key><string>0.4.0</string>
-	<key>CFBundleVersion</key><string>5</string>
+	<key>CFBundleShortVersionString</key><string>0.4.1</string>
+	<key>CFBundleVersion</key><string>6</string>
 	<key>CFBundleIconFile</key><string>Dustlight.icns</string>
+	<key>CFBundleIconName</key><string>Dustlight</string>
 	<key>SUFeedURL</key><string>https://iomz.github.io/TheClipboard/appcast.xml</string>
 	<key>SUPublicEDKey</key><string>k8/hIcoKO/Gy4CFjz2lxXWEgCj3ZBJUcytQd37puKHY=</string>
 	<key>SUScheduledCheckInterval</key><real>86400</real>

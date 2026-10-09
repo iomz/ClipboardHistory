@@ -32,4 +32,5 @@ find "$WORK/mount" -mindepth 1 -maxdepth 1 ! -name 'The Clipboard.app' \
 test ! -s "$WORK/unexpected.txt"
 "$ROOT/Scripts/test-distribution.sh" "$WORK/mount/The Clipboard.app"
 "$ROOT/Scripts/test-icon.sh" "$WORK/mount/The Clipboard.app"
+"$ROOT/Scripts/test-finder-icon.sh" "$WORK/mount/The Clipboard.app"
 echo "DMG is read-only; app and Applications symlink verified; no extra payloads."

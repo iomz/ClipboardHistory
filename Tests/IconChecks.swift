@@ -20,6 +20,10 @@ let masterImage = CGImageSourceCreateImageAtIndex(masterSource, 0, nil)!
 require(masterImage.width == 1254 && masterImage.height == 1254, "Master dimensions changed")
 require(masterImage.colorSpace?.name == CGColorSpace.sRGB, "Untagged master must decode as sRGB")
 require([.first, .last, .premultipliedFirst, .premultipliedLast].contains(masterImage.alphaInfo), "Master alpha missing")
+let masterBitmap = NSBitmapImageRep(cgImage: masterImage)
+for (x, y) in [(0, 0), (1253, 0), (0, 1253), (1253, 1253)] {
+    require(masterBitmap.colorAt(x: x, y: y)!.alphaComponent < 0.02, "Approved master corner transparency missing")
+}
 
 let representations: [(String, Int)] = [
     ("icon_16x16",16), ("icon_16x16@2x",32), ("icon_32x32",32), ("icon_32x32@2x",64),
@@ -46,6 +50,7 @@ if args.count > 3 {
     let app = URL(fileURLWithPath: args[3])
     let info = try PropertyListSerialization.propertyList(from: Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")), format: nil) as! [String: Any]
     require(info["CFBundleIconFile"] as? String == "Dustlight.icns", "Icon metadata missing")
+    require(info["CFBundleIconName"] as? String == "Dustlight", "Modern Finder icon metadata missing")
     let resource = design == "Dustlight" ? "Dustlight" : "Lagoon"
     let url = app.appendingPathComponent("Contents/Resources/\(resource).icns")
     let icon = NSImage(contentsOf: url)!

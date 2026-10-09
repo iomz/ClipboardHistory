@@ -14,12 +14,12 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
     private let tableView = NSTableView()
     private let emptyLabel = NSTextField(wrappingLabelWithString: "")
     private let previewView = NSTextView()
-    private let detailPreviewImage = NSImageView()
+    private let detailPreviewImage = ManagerPreviewImageView()
     private var detailPreviewImageHeight: NSLayoutConstraint!
     private let detailSourceImage = NSImageView()
-    private let detailSourceLabel = NSTextField(labelWithString: "")
-    private let detailTypeLabel = NSTextField(labelWithString: "")
-    private let detailDateLabel = NSTextField(labelWithString: "")
+    private let detailSourceLabel = ManagerDetailLabel(labelWithString: "")
+    private let detailTypeLabel = ManagerDetailLabel(labelWithString: "")
+    private let detailDateLabel = ManagerDetailLabel(labelWithString: "")
     private let favoriteButton = NSButton(title: "Favorite", target: nil, action: nil)
     private let copyButton = NSButton(title: "Copy", target: nil, action: nil)
     private let plainCopyButton = NSButton(title: "Copy as Plain Text", target: nil, action: nil)
@@ -134,7 +134,8 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
         split.dividerStyle = .thin
         split.translatesAutoresizingMaskIntoConstraints = false
         split.addArrangedSubview(listPane)
-        split.addArrangedSubview(makeDetailPane())
+        let detailPane = makeDetailPane()
+        split.addArrangedSubview(detailPane)
         listPane.widthAnchor.constraint(greaterThanOrEqualToConstant: 360).isActive = true
 
         let header = NSStackView(views: [searchField, scopeControl])
@@ -153,6 +154,10 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
             split.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 14),
             split.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12),
         ])
+        // Original 760-point frame minimum cannot fit all existing controls.
+        // Let AppKit account for margins/alignment insets; this minimum must not
+        // constrain normal resizing or choose the divider's position.
+        window?.contentMinSize = NSSize(width: content.fittingSize.width, height: window!.contentMinSize.height)
     }
 
     private func makeDetailPane() -> NSView {
@@ -189,6 +194,12 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
         favoriteButton.action = #selector(toggleFavorite)
         favoriteButton.image = NSImage(systemSymbolName: "star.fill", accessibilityDescription: "Favorite")
         favoriteButton.imagePosition = .imageLeading
+        // Both action titles share one width; changing selection must never
+        // change the detail pane's minimum fitting width through this button.
+        favoriteButton.title = "Unfavorite"
+        let favoriteWidth = favoriteButton.intrinsicContentSize.width
+        favoriteButton.title = "Favorite"
+        favoriteButton.widthAnchor.constraint(equalToConstant: max(favoriteWidth, favoriteButton.intrinsicContentSize.width)).isActive = true
         copyButton.target = self
         copyButton.action = #selector(copyRich)
         plainCopyButton.target = self
@@ -216,11 +227,13 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
             detailSourceImage.heightAnchor.constraint(equalToConstant: 32),
             detailSourceLabel.leadingAnchor.constraint(equalTo: detailSourceImage.trailingAnchor, constant: 10),
             detailSourceLabel.centerYAnchor.constraint(equalTo: detailSourceImage.centerYAnchor),
-            detailSourceLabel.trailingAnchor.constraint(lessThanOrEqualTo: pane.trailingAnchor, constant: -12),
+            detailSourceLabel.trailingAnchor.constraint(equalTo: pane.trailingAnchor, constant: -12),
             detailTypeLabel.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 18),
             detailTypeLabel.topAnchor.constraint(equalTo: detailSourceImage.bottomAnchor, constant: 12),
+            detailTypeLabel.trailingAnchor.constraint(equalTo: pane.trailingAnchor, constant: -18),
             detailDateLabel.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 18),
             detailDateLabel.topAnchor.constraint(equalTo: detailTypeLabel.bottomAnchor, constant: 4),
+            detailDateLabel.trailingAnchor.constraint(equalTo: pane.trailingAnchor, constant: -18),
             detailPreviewImage.leadingAnchor.constraint(equalTo: pane.leadingAnchor, constant: 18),
             detailPreviewImage.trailingAnchor.constraint(equalTo: pane.trailingAnchor, constant: -18),
             detailPreviewImage.topAnchor.constraint(equalTo: detailDateLabel.bottomAnchor, constant: 14),
@@ -300,6 +313,7 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
 
     private func reloadEntries(preservingSelection: Bool = false) {
         let previousID = preservingSelection ? selectedEntryID : nil
+        let previousRow = tableView.selectedRow
         let searched = history.search(searchField.stringValue)
         entries = scopeControl.selectedSegment == 1 ? searched.filter(\.isFavorite) : searched
         tableView.reloadData()
@@ -311,6 +325,7 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
             tableView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
             selectedEntryID = previousID
             setDetail(entries[index])
+            if index != previousRow { tableView.scrollRowToVisible(index) }
         } else if !entries.isEmpty {
             tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
             selectedEntryID = entries[0].id
@@ -379,11 +394,12 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
 
     private func copy(plainTextOnly: Bool) {
         guard let entry = selectedEntry else { return }
-        guard PasteboardRestorer.restore(entry, plainTextOnly: plainTextOnly) else {
+        guard capture.restore(entry, plainTextOnly: plainTextOnly) else {
             onFeedback("Could not restore clipboard representation")
             return
         }
-        capture.noteOwnWrite()
+        do { try history.recordReuse(of: entry.id) }
+        catch { onFeedback("Copied to clipboard, but could not save history order"); return }
         onFeedback("Copied to clipboard")
     }
 
@@ -413,5 +429,20 @@ final class HistoryManagerRowCell: NSTableCellView {
     private func updateFavoriteTint() {
         favoriteIndicator.contentTintColor = backgroundStyle == .emphasized
             ? .alternateSelectedControlTextColor : .secondaryLabelColor
+    }
+}
+
+/// Preview scales inside the existing pane; source pixel width must not become
+/// a split-view sizing preference. Height remains controlled by its constraint.
+private final class ManagerPreviewImageView: NSImageView {
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: super.intrinsicContentSize.height)
+    }
+}
+
+/// Long source/type/date text uses available detail width, not pane allocation.
+private final class ManagerDetailLabel: NSTextField {
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: super.intrinsicContentSize.height)
     }
 }

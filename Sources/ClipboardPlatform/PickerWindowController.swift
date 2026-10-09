@@ -33,12 +33,18 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
     private let capture: PasteboardCapture
     private let onFeedback: (String) -> Void
     private let onOpenHistoryManager: () -> Void
-    private let panel: NSPanel
+    let panel: NSPanel
     private let searchField = NSSearchField()
     private let tableView = NSTableView()
     private let countLabel = NSTextField(labelWithString: "")
     private var rows: [ClipboardEntry] = []
-    private var destinationApplication: NSRunningApplication?
+    var destinationApplication: NSRunningApplication?
+    // Internal seams let regression tests exercise the real handoff/failure
+    // path without requesting permissions, activating apps or posting keys.
+    var ensurePasteAccess: () -> Bool = PasteCommand.ensureEventPostingAccess
+    var postPaste: (pid_t) -> Bool = { PasteCommand.post(to: $0) }
+    var frontmostPID: () -> pid_t? = { NSWorkspace.shared.frontmostApplication?.processIdentifier }
+    var activateDestination: (NSRunningApplication) -> Bool = { $0.activate(options: []) }
     private var lastExternalApplication: NSRunningApplication?
     private var activationObserver: NSObjectProtocol?
     private var historyObserver: NSObjectProtocol?
@@ -186,15 +192,17 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
         panel.setFrameOrigin(origin)
     }
 
-    private func reloadRows(query: String = "", preservingSelection: Bool = false) {
+    func reloadRows(query: String = "", preservingSelection: Bool = false) {
         cancelHoverPreview()
         let selectedID = preservingSelection && rows.indices.contains(tableView.selectedRow)
             ? rows[tableView.selectedRow].id : nil
+        let previousRow = tableView.selectedRow
         rows = history.search(query)
         tableView.reloadData()
         countLabel.stringValue = "\(rows.count) items · Return to paste · ⇧Return plain · ⇧⌘Space Manager"
         if let selectedID, let index = rows.firstIndex(where: { $0.id == selectedID }) {
             tableView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+            if index != previousRow { tableView.scrollRowToVisible(index) }
         } else if !rows.isEmpty {
             tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
         }
@@ -386,19 +394,18 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
     @objc private func activateRichPaste() { activate(plainTextOnly: false) }
     private func activatePlainPaste() { activate(plainTextOnly: true) }
 
-    private func activate(plainTextOnly: Bool) {
+    func activate(plainTextOnly: Bool) {
         guard rows.indices.contains(tableView.selectedRow) else { NSSound.beep(); return }
         let selectedIndex = tableView.selectedRow
         let entry = rows[selectedIndex]
         Self.pasteLogger.info("paste activation started plainTextOnly=\(plainTextOnly, privacy: .public) selectedIndex=\(selectedIndex, privacy: .public)")
-        guard PasteboardRestorer.restore(entry, plainTextOnly: plainTextOnly) else {
+        guard capture.restore(entry, plainTextOnly: plainTextOnly) else {
             Self.pasteLogger.error("paste restore failed")
             onFeedback("Could not restore clipboard representation")
             dismiss()
             return
         }
         Self.pasteLogger.info("paste restore succeeded")
-        capture.noteOwnWrite()
         let destination = destinationApplication
         guard let destination, !destination.isTerminated else {
             dismiss()
@@ -406,7 +413,7 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
             onFeedback("Clipboard restored. Paste manually with ⌘V.")
             return
         }
-        guard PasteCommand.ensureEventPostingAccess() else {
+        guard ensurePasteAccess() else {
             dismiss()
             Self.pasteLogger.error("paste aborted: event-synthesizing access unavailable; clipboard remains restored")
             onFeedback("Clipboard restored. Enable The Clipboard in System Settings › Privacy & Security › Accessibility, then try again.")
@@ -414,43 +421,45 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
         }
         dismiss()
         let targetPID = destination.processIdentifier
-        let wasAlreadyFrontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier == targetPID
-        let activationRequested = wasAlreadyFrontmost || destination.activate(options: [])
+        let wasAlreadyFrontmost = frontmostPID() == targetPID
+        let activationRequested = wasAlreadyFrontmost || activateDestination(destination)
         Self.pasteLogger.info("destination activation pid=\(targetPID, privacy: .public) alreadyFrontmost=\(wasAlreadyFrontmost, privacy: .public) requestAccepted=\(activationRequested, privacy: .public)")
         guard activationRequested else {
             Self.pasteLogger.error("paste aborted: destination activation request rejected")
             onFeedback("Clipboard restored. Destination did not activate; paste manually with ⌘V.")
             return
         }
-        waitForDestinationAndPost(destination, attemptsRemaining: 60)
+        waitForDestinationAndPost(destination, entryID: entry.id, attemptsRemaining: 60)
     }
 
-    private func waitForDestinationAndPost(_ destination: NSRunningApplication, attemptsRemaining: Int) {
+    func waitForDestinationAndPost(_ destination: NSRunningApplication, entryID: UUID, attemptsRemaining: Int) {
         let targetPID = destination.processIdentifier
         guard !destination.isTerminated else {
             Self.pasteLogger.error("paste aborted: destination terminated during focus handoff")
             onFeedback("Clipboard restored. Paste manually with ⌘V.")
             return
         }
-        let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        guard frontmostPID == targetPID else {
+        let observedPID = frontmostPID()
+        guard observedPID == targetPID else {
             guard attemptsRemaining > 0 else {
-                Self.pasteLogger.error("paste aborted: destination did not become frontmost; observedPID=\(frontmostPID ?? 0, privacy: .public)")
+                Self.pasteLogger.error("paste aborted: destination did not become frontmost; observedPID=\(observedPID ?? 0, privacy: .public)")
                 onFeedback("Clipboard restored. Destination did not activate; paste manually with ⌘V.")
                 return
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.025) { [weak self] in
-                self?.waitForDestinationAndPost(destination, attemptsRemaining: attemptsRemaining - 1)
+                self?.waitForDestinationAndPost(destination, entryID: entryID, attemptsRemaining: attemptsRemaining - 1)
             }
             return
         }
         Self.pasteLogger.info("destination frontmost verified pid=\(targetPID, privacy: .public)")
-        guard PasteCommand.post(to: targetPID) else {
+        guard postPaste(targetPID) else {
             Self.pasteLogger.error("paste event creation failed targetPID=\(targetPID, privacy: .public)")
             onFeedback("Clipboard restored. Paste manually with ⌘V.")
             return
         }
         Self.pasteLogger.info("paste event pair dispatched targetPID=\(targetPID, privacy: .public)")
+        do { try history.recordReuse(of: entryID) }
+        catch { onFeedback("Paste dispatched, but could not save history order") }
     }
 
     private func dismiss(restoreDestination: Bool = false) {

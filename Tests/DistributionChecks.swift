@@ -18,7 +18,7 @@ do {
     let source = try plist(args[1])
     let app = URL(fileURLWithPath: args[2], isDirectory: true)
     let bundled = try plist(app.appendingPathComponent("Contents/Info.plist").path)
-    for key in ["CFBundleIdentifier", "CFBundleName", "CFBundleDisplayName", "CFBundleExecutable", "CFBundleShortVersionString", "CFBundleVersion", "LSMinimumSystemVersion", "SUFeedURL", "SUPublicEDKey"] {
+    for key in ["CFBundleIdentifier", "CFBundleName", "CFBundleDisplayName", "CFBundleExecutable", "CFBundleShortVersionString", "CFBundleVersion", "LSMinimumSystemVersion", "SUFeedURL", "SUPublicEDKey", "CFBundleIconName"] {
         try require(bundled[key] as? String == source[key] as? String, "Bundle metadata mismatch: \(key)")
     }
     try require(bundled["CFBundleIdentifier"] as? String == "com.iomz.TheClipboard", "Wrong new application identity")
@@ -45,7 +45,10 @@ do {
     try require(executables == ["TheClipboard"], "Unexpected executables/secrets")
     try require(frameworks == ["Sparkle.framework"], "Unexpected frameworks/tools")
     let resources = try FileManager.default.contentsOfDirectory(atPath: contents.appendingPathComponent("Resources").path)
-    try require(Set(resources) == ["Sparkle-LICENSE.txt", "Dustlight.icns", "Lagoon.icns"], "Unexpected resources/secrets")
+    try require(Set(resources) == ["Sparkle-LICENSE.txt", "Dustlight.icns", "Lagoon.icns", "Assets.car"], "Unexpected resources/secrets")
+    try require(bundled["CFBundleIconName"] as? String == "Dustlight", "Missing modern Finder icon declaration")
+    let catalogData = try Data(contentsOf: contents.appendingPathComponent("Resources/Assets.car"))
+    try require(!catalogData.isEmpty, "Missing modern Finder icon catalog")
     try require(bundled["CFBundleIconFile"] as? String == "Dustlight.icns", "Missing application icon metadata")
     try require(source["CFBundleIconFile"] as? String == bundled["CFBundleIconFile"] as? String, "Icon metadata mismatch")
     let icon = try Data(contentsOf: contents.appendingPathComponent("Resources/Dustlight.icns"))

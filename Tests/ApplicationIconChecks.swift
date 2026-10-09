@@ -11,7 +11,7 @@ enum ApplicationIconChecks {
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let app = Bundle(url: URL(fileURLWithPath: CommandLine.arguments[1]))!
-        let protectedURLs = ["Info.plist", "Resources/Dustlight.icns", "Resources/Lagoon.icns", "_CodeSignature/CodeResources"]
+        let protectedURLs = ["Info.plist", "Resources/Dustlight.icns", "Resources/Lagoon.icns", "Resources/Assets.car", "_CodeSignature/CodeResources"]
             .map { app.bundleURL.appendingPathComponent("Contents/\($0)") }
         let before = try protectedURLs.map { try Data(contentsOf: $0) }
         let dustlight = ApplicationIconController.loadImage(.dustlight, bundle: app)!

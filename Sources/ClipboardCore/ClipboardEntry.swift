@@ -39,6 +39,8 @@ public struct ClipboardEntry: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public let firstCapturedAt: Date
     public var lastCapturedAt: Date
+    public var lastUsedAt: Date?
+    public var orderingDate: Date { max(lastCapturedAt, lastUsedAt ?? lastCapturedAt) }
     public var sourceApplication: SourceApplication
     public var isFavorite: Bool
     public var pasteboardItems: [ClipboardPasteboardItem]
@@ -64,7 +66,7 @@ public struct ClipboardEntry: Codable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, firstCapturedAt, lastCapturedAt, sourceApplication, isFavorite
+        case id, firstCapturedAt, lastCapturedAt, lastUsedAt, sourceApplication, isFavorite
         case pasteboardItems, plainText, canonicalIdentity
     }
 
@@ -184,7 +186,7 @@ public final class ClipboardLibrary {
 
     public init(store: ClipboardEntryStore) {
         self.store = store
-        self.entries = store.loadAll().sorted { $0.lastCapturedAt > $1.lastCapturedAt }
+        self.entries = store.loadAll().sorted { $0.orderingDate > $1.orderingDate }
     }
 
     public func allEntries() -> [ClipboardEntry] {
@@ -209,6 +211,7 @@ public final class ClipboardLibrary {
                     plainText: incoming.plainText
                 )
                 promoted.lastCapturedAt = date
+                promoted.lastUsedAt = existing.lastUsedAt
                 try store.upsert(promoted)
                 entries.remove(at: index)
                 wasDuplicate = true
@@ -221,6 +224,26 @@ public final class ClipboardLibrary {
             lock.unlock()
             NotificationCenter.default.post(name: .clipboardLibraryDidChange, object: self)
             return CaptureResult(entry: promoted, wasDuplicate: wasDuplicate)
+        } catch {
+            lock.unlock()
+            throw error
+        }
+    }
+
+    /// Successful reuse updates ordering only. Persist before changing memory or
+    /// notifying views; failed storage writes leave order and selection intact.
+    public func recordReuse(of id: UUID, at date: Date = Date()) throws {
+        lock.lock()
+        do {
+            guard let index = entries.firstIndex(where: { $0.id == id }) else { lock.unlock(); return }
+            var entry = entries[index]
+            let newest = entries.map(\.orderingDate).max() ?? date
+            entry.lastUsedAt = max(date, newest.addingTimeInterval(0.000001))
+            try store.upsert(entry)
+            entries.remove(at: index)
+            entries.insert(entry, at: 0)
+            lock.unlock()
+            NotificationCenter.default.post(name: .clipboardLibraryDidChange, object: self)
         } catch {
             lock.unlock()
             throw error

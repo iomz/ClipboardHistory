@@ -16,6 +16,7 @@ public final class FileEntryStore: ClipboardEntryStore {
         let id: UUID
         let firstCapturedAt: Date
         let lastCapturedAt: Date
+        let lastUsedAt: Date?
         let sourceApplication: SourceApplication
         let isFavorite: Bool
         let plainText: String?
@@ -37,7 +38,7 @@ public final class FileEntryStore: ClipboardEntryStore {
         guard let children = try? fileManager.contentsOfDirectory(
             at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
         ) else { return [] }
-        return children.compactMap(loadEntry(at:)).sorted { $0.lastCapturedAt > $1.lastCapturedAt }
+        return children.compactMap(loadEntry(at:)).sorted { $0.orderingDate > $1.orderingDate }
     }
 
     public func upsert(_ entry: ClipboardEntry) throws {
@@ -59,7 +60,7 @@ public final class FileEntryStore: ClipboardEntryStore {
             }
             let metadata = Metadata(
                 schemaVersion: 1, id: entry.id, firstCapturedAt: entry.firstCapturedAt,
-                lastCapturedAt: entry.lastCapturedAt, sourceApplication: entry.sourceApplication,
+                lastCapturedAt: entry.lastCapturedAt, lastUsedAt: entry.lastUsedAt, sourceApplication: entry.sourceApplication,
                 isFavorite: entry.isFavorite, plainText: entry.plainText,
                 canonicalIdentity: entry.canonicalIdentity, items: itemReferences
             )
@@ -109,6 +110,7 @@ public final class FileEntryStore: ClipboardEntryStore {
             pasteboardItems: items, plainText: metadata.plainText
         )
         entry.lastCapturedAt = metadata.lastCapturedAt
+        entry.lastUsedAt = metadata.lastUsedAt
         guard entry.canonicalIdentity == metadata.canonicalIdentity else { return nil }
         return entry
     }

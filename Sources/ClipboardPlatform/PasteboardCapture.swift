@@ -148,7 +148,14 @@ public final class PasteboardCapture {
         lastChangeCount = pasteboard.changeCount
     }
 
-    private func poll() {
+    /// Use the same board as monitoring, including isolated test boards.
+    func restore(_ entry: ClipboardEntry, plainTextOnly: Bool) -> Bool {
+        guard PasteboardRestorer.restore(entry, plainTextOnly: plainTextOnly, to: pasteboard) else { return false }
+        noteOwnWrite()
+        return true
+    }
+
+    func poll() {
         let changeCount = pasteboard.changeCount
         guard changeCount != lastChangeCount else { return }
         lastChangeCount = changeCount
