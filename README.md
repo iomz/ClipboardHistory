@@ -4,7 +4,7 @@
 <h1 align="center">The Clipboard</h1>
 <p align="center">📋 Copy now. Find it later. A little clipboard companion for macOS.</p>
 <p align="center">
-  <a href="https://github.com/iomz/TheClipboard/releases"><img src="https://img.shields.io/badge/release-unpublished-8b5cf6?style=flat" alt="Release — unpublished"></a>
+  <a href="https://github.com/iomz/TheClipboard/releases"><img src="https://img.shields.io/github/v/release/iomz/TheClipboard?style=flat&color=8b5cf6" alt="Latest release"></a>
   <a href="#-download"><img src="https://img.shields.io/badge/macOS-26%2B-007AFF?style=flat" alt="macOS 26 or later"></a>
   <a href="#-download"><img src="https://img.shields.io/badge/Apple_Silicon-arm64-14b8a6?style=flat" alt="Apple Silicon — arm64"></a>
 </p>
@@ -35,7 +35,7 @@ Type in the picker to search. If macOS input-source shortcuts intercept ⇧⌘Sp
 
 ## 📦 Download
 
-Requires **macOS 26+ and Apple Silicon**. **The Clipboard v0.4.0 is in development, not released yet.** Future DMGs will appear under [Releases](https://github.com/iomz/TheClipboard/releases). For now, see the [build instructions](DEVELOPMENT.md).
+Requires **macOS 26+ and Apple Silicon**. Download [The Clipboard v0.4.0](https://github.com/iomz/TheClipboard/releases/download/v0.4.0/TheClipboard-0.4.0-arm64.dmg), or browse [Releases](https://github.com/iomz/TheClipboard/releases). To build from source, see the [build instructions](DEVELOPMENT.md).
 
 🪴 A fresh application identity with its own clips, favorites and settings. No data or preferences are imported from another app. Allow Accessibility for **The Clipboard** when prompted to paste into other apps.
 
@@ -43,7 +43,7 @@ Requires **macOS 26+ and Apple Silicon**. **The Clipboard v0.4.0 is in developme
 
 ## 🦋 Updating
 
-Sparkle is ready for The Clipboard's own future updates. Choose **Check for Updates…** from the menu bar; until the new feed is published, a feed error is expected. Automatic checks are opt-in; downloads and installation remain manual.
+Sparkle checks The Clipboard's own releases. Choose **Check for Updates…** from the menu bar. Automatic checks are opt-in; downloads and installation remain manual.
 
 ## 🛠️ Make yourself at home
 
