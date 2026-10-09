@@ -8,7 +8,7 @@ if CommandLine.arguments.contains("--distribution-check") {
     guard delegate.checkDistributionConfiguration() else {
         fatalError("Sparkle/menu distribution configuration check failed")
     }
-    print("Sparkle started; both update menus target standard updater; automatic checks/downloads disabled.")
+    print("Sparkle started; update menus target standard updater; automatic preference preserved; background downloads disabled.")
     exit(0)
 }
 application.run()

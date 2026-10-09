@@ -21,10 +21,16 @@ func merge(_ current: URL, _ previous: URL) throws -> Int32 {
 let options: XMLNode.Options = [.nodeLoadExternalEntitiesNever]
 let previous = try XMLDocument(contentsOf: feed, options: options)
 let originalItems = try previous.nodes(forXPath: "/rss/channel/item")
-precondition(originalItems.count == 1, "Run baseline merge checks against v0.3.0 feed")
+precondition(!originalItems.isEmpty, "Need generated release items")
 let original = originalItems[0] as! XMLElement
 let next = previous.copy() as! XMLDocument
 let nextItem = try next.nodes(forXPath: "/rss/channel/item")[0] as! XMLElement
+let nextChannel = try next.nodes(forXPath: "/rss/channel")[0] as! XMLElement
+// Official generation yields only the current release before merge. Simulate
+// that shape even when the supplied feed already contains multiple releases.
+for extra in nextChannel.elements(forName: "item").dropFirst().reversed() {
+    nextChannel.removeChild(at: extra.index)
+}
 let oldBuild = Int(original.elements(forName: "sparkle:version")[0].stringValue!)!
 nextItem.elements(forName: "sparkle:version")[0].stringValue = String(oldBuild + 1)
 let currentURL = work.appendingPathComponent("current.xml")
@@ -33,15 +39,18 @@ let successStatus = try merge(currentURL, feed)
 precondition(successStatus == 0, "Merge should accept older build")
 let merged = try XMLDocument(contentsOf: currentURL, options: options)
 let mergedItems = try merged.nodes(forXPath: "/rss/channel/item")
-precondition(mergedItems.count == 2, "Merge lost item")
-let retained = mergedItems[1] as! XMLElement
-for name in ["sparkle:version", "sparkle:shortVersionString", "sparkle:minimumSystemVersion", "sparkle:hardwareRequirements"] {
-    precondition(retained.elements(forName: name).first?.stringValue == original.elements(forName: name).first?.stringValue)
-}
-let retainedEnclosure = retained.elements(forName: "enclosure")[0]
-let originalEnclosure = original.elements(forName: "enclosure")[0]
-for name in ["url", "length", "sparkle:edSignature"] {
-    precondition(retainedEnclosure.attribute(forName: name)?.stringValue == originalEnclosure.attribute(forName: name)?.stringValue, "Merge changed \(name)")
+precondition(mergedItems.count == originalItems.count + 1, "Merge lost item")
+for (index, originalNode) in originalItems.enumerated() {
+    let retained = mergedItems[index + 1] as! XMLElement
+    let originalItem = originalNode as! XMLElement
+    for name in ["sparkle:version", "sparkle:shortVersionString", "sparkle:minimumSystemVersion", "sparkle:hardwareRequirements"] {
+        precondition(retained.elements(forName: name).first?.stringValue == originalItem.elements(forName: name).first?.stringValue)
+    }
+    let retainedEnclosure = retained.elements(forName: "enclosure")[0]
+    let originalEnclosure = originalItem.elements(forName: "enclosure")[0]
+    for name in ["url", "length", "sparkle:edSignature"] {
+        precondition(retainedEnclosure.attribute(forName: name)?.stringValue == originalEnclosure.attribute(forName: name)?.stringValue, "Merge changed \(name)")
+    }
 }
 let identicalURL = work.appendingPathComponent("identical.xml")
 try previous.xmlData().write(to: identicalURL)

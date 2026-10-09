@@ -19,12 +19,20 @@ public struct PickerBadgePreviewState {
     }
 }
 
+public enum PickerShortcut {
+    public static func opensHistoryManager(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, pickerIsKey: Bool) -> Bool {
+        let shortcutModifiers = modifiers.intersection([.command, .shift, .control, .option])
+        return pickerIsKey && keyCode == 49 && shortcutModifiers == [.command, .shift]
+    }
+}
+
 public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     private static let pasteLogger = Logger(subsystem: "com.iomz.ClipboardHistory", category: "Paste")
     private static let badgeViewTag = 0x434842
     private let history: ClipboardHistory
     private let capture: PasteboardCapture
     private let onFeedback: (String) -> Void
+    private let onOpenHistoryManager: () -> Void
     private let panel: NSPanel
     private let searchField = NSSearchField()
     private let tableView = NSTableView()
@@ -47,10 +55,11 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
 
     public var latestExternalApplication: NSRunningApplication? { lastExternalApplication }
 
-    public init(history: ClipboardHistory, capture: PasteboardCapture, onFeedback: @escaping (String) -> Void) {
+    public init(history: ClipboardHistory, capture: PasteboardCapture, onOpenHistoryManager: @escaping () -> Void = {}, onFeedback: @escaping (String) -> Void) {
         self.history = history
         self.capture = capture
         self.onFeedback = onFeedback
+        self.onOpenHistoryManager = onOpenHistoryManager
         self.panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 500, height: 520),
             styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel], backing: .buffered, defer: true
@@ -183,7 +192,7 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
             ? rows[tableView.selectedRow].id : nil
         rows = history.search(query)
         tableView.reloadData()
-        countLabel.stringValue = "\(rows.count) items · Return to paste · ⇧Return for plain text"
+        countLabel.stringValue = "\(rows.count) items · Return to paste · ⇧Return plain · ⇧⌘Space Manager"
         if let selectedID, let index = rows.firstIndex(where: { $0.id == selectedID }) {
             tableView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
         } else if !rows.isEmpty {
@@ -250,6 +259,10 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
                 return event
             }
             let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if PickerShortcut.opensHistoryManager(keyCode: event.keyCode, modifiers: modifiers, pickerIsKey: self.panel.isKeyWindow) {
+                self.openHistoryManagerFromPicker()
+                return nil
+            }
             if modifiers.contains(.control), event.keyCode == 45 { self.moveSelection(1); return nil } // Ctrl-N
             if modifiers.contains(.control), event.keyCode == 35 { self.moveSelection(-1); return nil } // Ctrl-P
             switch event.keyCode {
@@ -267,6 +280,12 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
 
     private func removeKeyMonitor() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
+    }
+
+    func openHistoryManagerFromPicker() {
+        // Unlike paste/Escape, this does not reactivate the old destination.
+        dismiss()
+        onOpenHistoryManager()
     }
 
     private func reloadBadgeRowsPreservingSelection() {

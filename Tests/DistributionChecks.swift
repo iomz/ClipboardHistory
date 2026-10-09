@@ -23,7 +23,9 @@ do {
     }
     try require(bundled["CFBundleIdentifier"] as? String == "com.iomz.ClipboardHistory", "Application identity changed")
     try require(bundled["SUFeedURL"] as? String == "https://iomz.github.io/ClipboardHistory/appcast.xml", "Unexpected feed")
-    for key in ["SUEnableAutomaticChecks", "SUAutomaticallyUpdate", "SUAllowsAutomaticUpdates"] {
+    try require(bundled["SUEnableAutomaticChecks"] == nil, "Native consent is suppressed by bundle automatic-check override")
+    try require(bundled["SUScheduledCheckInterval"] as? Double == 86400, "Default check interval must be 24 hours")
+    for key in ["SUAutomaticallyUpdate", "SUAllowsAutomaticUpdates"] {
         try require(bundled[key] as? Bool == false, "Automatic updating enabled: \(key)")
     }
     try require(bundled["SUVerifyUpdateBeforeExtraction"] as? Bool == true, "Archive verification must precede extraction")

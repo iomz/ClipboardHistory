@@ -16,4 +16,7 @@ mkdir -p "$ROOT/build/tests"
 swiftc "$ROOT/Tests/DistributionChecks.swift" -o "$ROOT/build/tests/distribution-checks"
 "$ROOT/build/tests/distribution-checks" "$ROOT/Resources/Info.plist" "$APP" "${2:-}" "${3:-}"
 # This explicit diagnostic exits before capture, history, hotkeys or event loop.
-"$APP/Contents/MacOS/ClipboardHistory" --distribution-check
+# Argument-domain overrides are non-persistent and do not change installed app
+# preferences. Test both choices without starting the run loop/network schedule.
+"$APP/Contents/MacOS/ClipboardHistory" --distribution-check -SUEnableAutomaticChecks NO -SUScheduledCheckInterval 86400
+"$APP/Contents/MacOS/ClipboardHistory" --distribution-check -SUEnableAutomaticChecks YES -SUScheduledCheckInterval 86400

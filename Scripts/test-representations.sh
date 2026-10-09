@@ -9,7 +9,7 @@ swiftc -emit-module -emit-library -module-name ClipboardCore -target arm64-apple
   Sources/ClipboardCore/FileEntryStore.swift \
   -emit-module-path build/tests/ClipboardCore.swiftmodule \
   -o build/tests/libClipboardCore.dylib
-swiftc -emit-module -emit-library -module-name ClipboardPlatform -target arm64-apple-macosx26.0 -sdk "$SDK" \
+swiftc -emit-module -emit-library -enable-testing -module-name ClipboardPlatform -target arm64-apple-macosx26.0 -sdk "$SDK" \
   -I build/tests -L build/tests -lClipboardCore \
   Sources/ClipboardPlatform/PasteboardCapture.swift \
   Sources/ClipboardPlatform/ClipboardEntryPreview.swift \

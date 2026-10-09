@@ -3,9 +3,11 @@ import Carbon
 import ClipboardCore
 import ClipboardPlatform
 import Foundation
+import OSLog
 import Sparkle
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, SPUUpdaterDelegate {
+    private static let updateLogger = Logger(subsystem: "com.iomz.ClipboardHistory", category: "Updates")
     private var statusItem: NSStatusItem!
     private var store: FileEntryStore!
     private var history: ClipboardHistory!
@@ -18,11 +20,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var updaterController: SPUStandardUpdaterController!
 
     private func configureUpdater() {
-        updaterController = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
-        // Enforce manual-only checks, even if an older preference enables them.
-        updaterController.updater.automaticallyChecksForUpdates = false
-        updaterController.updater.automaticallyDownloadsUpdates = false
+        // Sparkle owns consent, persisted preferences and scheduling. Do not
+        // write preferences on launch (v0.3.0's stored NO must remain NO).
+        updaterController = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
         updaterController.startUpdater()
+    }
+
+    private func automaticChecksMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Automatically Check for Updates", action: #selector(toggleAutomaticChecks), keyEquivalent: "")
+        item.target = self
+        return item
+    }
+
+    @objc private func toggleAutomaticChecks() {
+        updaterController.updater.automaticallyChecksForUpdates.toggle()
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleAutomaticChecks) {
+            menuItem.state = updaterController.updater.automaticallyChecksForUpdates ? .on : .off
+            return !updaterController.updater.sessionInProgress
+        }
+        return true
+    }
+
+    func updater(_ updater: SPUUpdater, willScheduleUpdateCheckAfterDelay delay: TimeInterval) {
+        Self.updateLogger.info("Sparkle scheduled check in \(delay, privacy: .public) seconds; interval \(updater.updateCheckInterval, privacy: .public) seconds")
+    }
+
+    func updaterWillNotScheduleUpdateCheck(_ updater: SPUUpdater) {
+        Self.updateLogger.info("Sparkle automatic checks disabled; no scheduled check")
     }
 
     private func updateMenuItem() -> NSMenuItem {
@@ -40,19 +67,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menus = [statusItem.menu, NSApp.mainMenu?.items.first?.submenu]
         let about = NSApp.mainMenu?.items.first?.submenu?.items.first
         let information = AboutInformation()
+        let expectedInterval = (UserDefaults.standard.object(forKey: "SUScheduledCheckInterval") as? NSNumber)?.doubleValue
+            ?? (Bundle.main.object(forInfoDictionaryKey: "SUScheduledCheckInterval") as? NSNumber)?.doubleValue
         print("Running bundle: \(Bundle.main.bundleURL.path); version \(information.version), build \(information.build)")
+        print("Automatic checks: \(updaterController.updater.automaticallyChecksForUpdates); interval: \(updaterController.updater.updateCheckInterval); background downloads: \(updaterController.updater.automaticallyDownloadsUpdates)")
         return updaterController.updater.canCheckForUpdates
             && about?.target === self
             && about?.action == #selector(showAbout)
             && information.version == Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
             && information.build == Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-            && !updaterController.updater.automaticallyChecksForUpdates
+            && updaterController.updater.automaticallyChecksForUpdates == UserDefaults.standard.bool(forKey: "SUEnableAutomaticChecks")
+            && updaterController.updater.updateCheckInterval == expectedInterval
             && !updaterController.updater.automaticallyDownloadsUpdates
             && menus.allSatisfy { menu in
                 menu?.items.contains { item in
                     item.title == "Check for Updates…"
                         && item.target === updaterController
                         && item.action == #selector(SPUStandardUpdaterController.checkForUpdates(_:))
+                } == true && menu?.items.contains { item in
+                    item.action == #selector(toggleAutomaticChecks) && item.target === self
                 } == true
             }
     }
@@ -75,7 +108,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             configureUpdater()
             configureStatusItem()
             configureMainMenu()
-            picker = PickerWindowController(history: history, capture: capture) { [weak self] message in
+            picker = PickerWindowController(history: history, capture: capture, onOpenHistoryManager: { [weak self] in
+                self?.historyManager.showManager(focusSearch: true)
+            }) { [weak self] message in
                 self?.showFeedback(message)
             }
             historyManager = HistoryManagerWindowController(history: history, capture: capture) { [weak self] message in
@@ -128,6 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Quit Clipboard History", action: #selector(quit), keyEquivalent: "q"))
         menu.items.forEach { $0.target = self }
         menu.insertItem(updateMenuItem(), at: menu.items.count - 1)
+        menu.insertItem(automaticChecksMenuItem(), at: menu.items.count - 1)
         statusItem.menu = menu
     }
 
@@ -139,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         about.target = self
         appMenu.addItem(about)
         appMenu.addItem(updateMenuItem())
+        appMenu.addItem(automaticChecksMenuItem())
         appMenu.addItem(.separator())
         let hide = NSMenuItem(title: "Hide Clipboard History", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         hide.target = NSApp

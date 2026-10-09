@@ -68,11 +68,12 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
         if let historyObserver { NotificationCenter.default.removeObserver(historyObserver) }
     }
 
-    public func showManager() {
+    public func showManager(focusSearch: Bool = false) {
         onWindowVisibilityChanged(true)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        if focusSearch { window?.makeFirstResponder(searchField) }
     }
 
     public func windowWillClose(_ notification: Notification) {
@@ -186,6 +187,8 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
         }
         favoriteButton.target = self
         favoriteButton.action = #selector(toggleFavorite)
+        favoriteButton.image = NSImage(systemSymbolName: "star.fill", accessibilityDescription: "Favorite")
+        favoriteButton.imagePosition = .imageLeading
         copyButton.target = self
         copyButton.action = #selector(copyRich)
         plainCopyButton.target = self
@@ -239,7 +242,8 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
     public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard entries.indices.contains(row) else { return nil }
         let entry = entries[row]
-        let cell = NSTableCellView()
+        let cell = HistoryManagerRowCell()
+        cell.configureFavorite(entry.isFavorite)
         let sourceImage = NSImageView()
         sourceImage.translatesAutoresizingMaskIntoConstraints = false
         sourceImage.imageScaling = .scaleProportionallyUpOrDown
@@ -257,17 +261,22 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
         cell.addSubview(sourceImage)
         cell.addSubview(preview)
         cell.addSubview(metadata)
+        cell.addSubview(cell.favoriteIndicator)
         NSLayoutConstraint.activate([
             sourceImage.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 10),
             sourceImage.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             sourceImage.widthAnchor.constraint(equalToConstant: 28),
             sourceImage.heightAnchor.constraint(equalToConstant: 28),
             preview.leadingAnchor.constraint(equalTo: sourceImage.trailingAnchor, constant: 10),
-            preview.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
+            preview.trailingAnchor.constraint(equalTo: cell.favoriteIndicator.leadingAnchor, constant: -8),
             preview.topAnchor.constraint(equalTo: cell.topAnchor, constant: 14),
             metadata.leadingAnchor.constraint(equalTo: preview.leadingAnchor),
             metadata.trailingAnchor.constraint(equalTo: preview.trailingAnchor),
             metadata.topAnchor.constraint(equalTo: preview.bottomAnchor, constant: 4),
+            cell.favoriteIndicator.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -10),
+            cell.favoriteIndicator.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
+            cell.favoriteIndicator.widthAnchor.constraint(equalToConstant: 14),
+            cell.favoriteIndicator.heightAnchor.constraint(equalToConstant: 14),
         ])
         return cell
     }
@@ -324,6 +333,8 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
             detailPreviewImageHeight.constant = 0
             favoriteButton.title = "Favorite"
             favoriteButton.isEnabled = false
+            favoriteButton.contentTintColor = .secondaryLabelColor
+            favoriteButton.setAccessibilityLabel("Add to favorites")
             copyButton.isEnabled = false
             plainCopyButton.isEnabled = false
             deleteButton.isEnabled = false
@@ -339,6 +350,8 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
         detailPreviewImageHeight.constant = preview.image == nil ? 0 : 150
         previewView.string = preview.text
         favoriteButton.title = entry.isFavorite ? "Unfavorite" : "Favorite"
+        favoriteButton.contentTintColor = entry.isFavorite ? .controlAccentColor : .secondaryLabelColor
+        favoriteButton.setAccessibilityLabel(entry.isFavorite ? "Remove from favorites" : "Add to favorites")
         favoriteButton.isEnabled = true
         copyButton.isEnabled = true
         plainCopyButton.isEnabled = entry.plainText != nil
@@ -378,5 +391,27 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
         guard let entry = selectedEntry else { return }
         do { try history.remove(id: entry.id) }
         catch { onFeedback("Could not delete history item") }
+    }
+}
+
+final class HistoryManagerRowCell: NSTableCellView {
+    let favoriteIndicator = NSImageView()
+
+    override var backgroundStyle: NSView.BackgroundStyle {
+        didSet { updateFavoriteTint() }
+    }
+
+    func configureFavorite(_ isFavorite: Bool) {
+        favoriteIndicator.translatesAutoresizingMaskIntoConstraints = false
+        favoriteIndicator.image = NSImage(systemSymbolName: "star.fill", accessibilityDescription: "Favorite")
+        favoriteIndicator.isHidden = !isFavorite
+        favoriteIndicator.setAccessibilityElement(isFavorite)
+        favoriteIndicator.setAccessibilityLabel("Favorite")
+        updateFavoriteTint()
+    }
+
+    private func updateFavoriteTint() {
+        favoriteIndicator.contentTintColor = backgroundStyle == .emphasized
+            ? .alternateSelectedControlTextColor : .secondaryLabelColor
     }
 }
