@@ -9,12 +9,12 @@ let sourceData = try Data(contentsOf: source)
 let sourceInfo = try PropertyListSerialization.propertyList(from: sourceData, format: nil) as! [String: Any]
 precondition(sourceInfo["SUEnableAutomaticChecks"] == nil, "Keep native consent")
 precondition(sourceInfo["SUScheduledCheckInterval"] as? Double == 86400)
-let work = FileManager.default.temporaryDirectory.appendingPathComponent("ClipboardHistory-updater-tests-\(UUID().uuidString)")
+let work = FileManager.default.temporaryDirectory.appendingPathComponent("TheClipboard-updater-tests-\(UUID().uuidString)")
 try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
 defer { try? FileManager.default.removeItem(at: work) }
 
 for choice in [nil, false, true] as [Bool?] {
-    let id = "com.iomz.ClipboardHistory.Test.Updater.\(UUID().uuidString)"
+    let id = "com.iomz.TheClipboard.Test.Updater.\(UUID().uuidString)"
     defer { UserDefaults.standard.removePersistentDomain(forName: id) }
     var info = sourceInfo
     info["CFBundleIdentifier"] = id

@@ -2,11 +2,11 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/Resources/Info.plist")
-APP=${1:-"$ROOT/build/releases/$VERSION/Clipboard History.app"}
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/ClipboardHistory-icon-test.XXXXXX")
+APP=${1:-"$ROOT/build/releases/TheClipboard/$VERSION/The Clipboard.app"}
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/TheClipboard-icon-test.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 for DESIGN in Dustlight Lagoon; do
-  RESOURCE=ClipboardHistory
+  RESOURCE=Dustlight
   if [ "$DESIGN" = Lagoon ]; then RESOURCE=Lagoon; fi
   "$ROOT/Scripts/generate-icon.sh" "$WORK/$DESIGN-first.icns" "$DESIGN"
   "$ROOT/Scripts/generate-icon.sh" "$WORK/$DESIGN-second.icns" "$DESIGN"

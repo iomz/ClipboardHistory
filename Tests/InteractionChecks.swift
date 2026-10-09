@@ -17,14 +17,14 @@ enum InteractionChecks {
             precondition(!match(key, [.command, .shift], true))
         }
 
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ClipboardHistory-interaction-tests-\(UUID().uuidString)")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("TheClipboard-interaction-tests-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        let history = ClipboardHistory(store: try FileEntryStore(root: root))
+        let history = ClipboardLibrary(store: try FileEntryStore(root: root))
         let entry = ClipboardEntry(pasteboardItems: [.init(ordinal: 0, representations: [
             .init(typeIdentifier: "public.utf8-plain-text", data: Data("Disposable favorite fixture".utf8))
         ])])
         try history.capture(entry)
-        let board = NSPasteboard(name: .init("com.iomz.ClipboardHistory.Test.Interaction.\(UUID().uuidString)"))
+        let board = NSPasteboard(name: .init("com.iomz.TheClipboard.Test.Interaction.\(UUID().uuidString)"))
         defer { board.clearContents() }
         let capture = PasteboardCapture(history: history, pasteboard: board)
         var handoffs = 0

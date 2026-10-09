@@ -8,7 +8,7 @@ fi
 INFO="$1/Contents/Info.plist"
 TOOLS="$ROOT/.build/artifacts/sparkle/Sparkle/bin"
 codesign --verify --deep --strict "$1"
-PUBLIC_KEY=$("$TOOLS/generate_keys" --account com.iomz.ClipboardHistory -p)
+PUBLIC_KEY=$("$TOOLS/generate_keys" --account com.iomz.TheClipboard -p)
 EMBEDDED_KEY=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$INFO")
 if [ "$PUBLIC_KEY" != "$EMBEDDED_KEY" ]; then
   echo "Keychain public key does not match trusted baseline. Stop; do not replace or rotate keys." >&2
@@ -19,5 +19,5 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/opencode-sparkle-proof.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 # Only random non-secret challenge and public signature are written to disk.
 dd if=/dev/urandom of="$WORK/challenge.bin" bs=32 count=1 2>/dev/null
-"$TOOLS/sign_update" --account com.iomz.ClipboardHistory -p "$WORK/challenge.bin" > "$WORK/signature.txt"
+"$TOOLS/sign_update" --account com.iomz.TheClipboard -p "$WORK/challenge.bin" > "$WORK/signature.txt"
 swift "$ROOT/Scripts/verify-sparkle-signature.swift" "$INFO" "$WORK/challenge.bin" "$WORK/signature.txt"

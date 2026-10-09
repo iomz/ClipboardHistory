@@ -27,9 +27,9 @@ public enum PickerShortcut {
 }
 
 public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
-    private static let pasteLogger = Logger(subsystem: "com.iomz.ClipboardHistory", category: "Paste")
+    private static let pasteLogger = Logger(subsystem: "com.iomz.TheClipboard", category: "Paste")
     private static let badgeViewTag = 0x434842
-    private let history: ClipboardHistory
+    private let history: ClipboardLibrary
     private let capture: PasteboardCapture
     private let onFeedback: (String) -> Void
     private let onOpenHistoryManager: () -> Void
@@ -55,7 +55,7 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
 
     public var latestExternalApplication: NSRunningApplication? { lastExternalApplication }
 
-    public init(history: ClipboardHistory, capture: PasteboardCapture, onOpenHistoryManager: @escaping () -> Void = {}, onFeedback: @escaping (String) -> Void) {
+    public init(history: ClipboardLibrary, capture: PasteboardCapture, onOpenHistoryManager: @escaping () -> Void = {}, onFeedback: @escaping (String) -> Void) {
         self.history = history
         self.capture = capture
         self.onFeedback = onFeedback
@@ -80,7 +80,7 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
             }
         }
         historyObserver = NotificationCenter.default.addObserver(
-            forName: .clipboardHistoryDidChange, object: history, queue: .main
+            forName: .clipboardLibraryDidChange, object: history, queue: .main
         ) { [weak self] _ in
             guard let self, self.panel.isVisible else { return }
             self.reloadRows(query: self.searchField.stringValue, preservingSelection: true)
@@ -113,7 +113,7 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
     }
 
     private func configurePanel() {
-        panel.title = "Clipboard History"
+        panel.title = "The Clipboard"
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
@@ -128,7 +128,7 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
 
     private func configureContent() {
         let root = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 520))
-        searchField.placeholderString = "Search clipboard history"
+        searchField.placeholderString = "Search saved clips"
         searchField.delegate = self
         searchField.translatesAutoresizingMaskIntoConstraints = false
 
@@ -409,7 +409,7 @@ public final class PickerWindowController: NSObject, NSWindowDelegate, NSTableVi
         guard PasteCommand.ensureEventPostingAccess() else {
             dismiss()
             Self.pasteLogger.error("paste aborted: event-synthesizing access unavailable; clipboard remains restored")
-            onFeedback("Clipboard restored. Enable Clipboard History in System Settings › Privacy & Security › Accessibility, then try again.")
+            onFeedback("Clipboard restored. Enable The Clipboard in System Settings › Privacy & Security › Accessibility, then try again.")
             return
         }
         dismiss()

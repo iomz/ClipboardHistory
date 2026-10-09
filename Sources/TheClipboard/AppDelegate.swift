@@ -7,10 +7,10 @@ import OSLog
 import Sparkle
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, SPUUpdaterDelegate {
-    private static let updateLogger = Logger(subsystem: "com.iomz.ClipboardHistory", category: "Updates")
+    private static let updateLogger = Logger(subsystem: "com.iomz.TheClipboard", category: "Updates")
     private var statusItem: NSStatusItem!
     private var store: FileEntryStore!
-    private var history: ClipboardHistory!
+    private var history: ClipboardLibrary!
     private var capture: PasteboardCapture!
     private var picker: PickerWindowController!
     private var historyManager: HistoryManagerWindowController!
@@ -22,7 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
     private func configureUpdater() {
         // Sparkle owns consent, persisted preferences and scheduling. Do not
-        // write preferences on launch (v0.3.0's stored NO must remain NO).
+        // write preferences on launch or import the old application's defaults.
         updaterController = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
         updaterController.startUpdater()
     }
@@ -102,16 +102,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         iconController = ApplicationIconController()
         do {
             let support: URL
-            if let testDirectory = ProcessInfo.processInfo.environment["CLIPHISTORY_SUPPORT_DIRECTORY"] {
+            if let testDirectory = ProcessInfo.processInfo.environment["THECLIPBOARD_SUPPORT_DIRECTORY"] {
                 support = URL(fileURLWithPath: testDirectory, isDirectory: true)
             } else {
-                support = try FileManager.default.url(
+                let applicationSupport = try FileManager.default.url(
                     for: .applicationSupportDirectory, in: .userDomainMask,
                     appropriateFor: nil, create: true
-                ).appendingPathComponent("ClipboardHistory", isDirectory: true)
+                )
+                support = ApplicationIdentity.supportDirectory(in: applicationSupport)
             }
             store = try FileEntryStore(root: support.appendingPathComponent("Entries", isDirectory: true))
-            history = ClipboardHistory(store: store)
+            history = ClipboardLibrary(store: store)
             capture = PasteboardCapture(history: history)
             capture.start()
             configureUpdater()
@@ -136,7 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             let pickerStatus = pickerHotkey?.register() ?? OSStatus(paramErr)
             let plainTextStatus = plainTextPasteHotkey?.register() ?? OSStatus(paramErr)
             if pickerStatus != noErr || plainTextStatus != noErr {
-                statusItem.button?.toolTip = "Clipboard History · Use menu to open (shortcut unavailable)"
+                statusItem.button?.toolTip = "The Clipboard · Use menu to open (shortcut unavailable)"
             }
 
             // Explicit launches open the Manager. Background/login launchers can
@@ -167,14 +168,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
     private func configureStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "clipboard", accessibilityDescription: "Clipboard History")
-        statusItem.button?.toolTip = "Clipboard History · ⌥⌘V"
+        statusItem.button?.image = NSImage(systemSymbolName: "clipboard", accessibilityDescription: "The Clipboard")
+        statusItem.button?.toolTip = "The Clipboard · ⌥⌘V"
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Open Fast Picker…", action: #selector(openPicker), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Open History Manager…", action: #selector(openHistoryManager), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Clipboard Representation Report…", action: #selector(showClipboardReport), keyEquivalent: ""))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Clipboard History", action: #selector(quit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit The Clipboard", action: #selector(quit), keyEquivalent: "q"))
         menu.items.forEach { $0.target = self }
         menu.insertItem(updateMenuItem(), at: menu.items.count - 1)
         menu.insertItem(automaticChecksMenuItem(), at: menu.items.count - 1)
@@ -185,14 +186,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     private func configureMainMenu() {
         let mainMenu = NSMenu()
 
-        let appMenu = NSMenu(title: "Clipboard History")
-        let about = NSMenuItem(title: "About Clipboard History", action: #selector(showAbout), keyEquivalent: "")
+        let appMenu = NSMenu(title: "The Clipboard")
+        let about = NSMenuItem(title: "About The Clipboard", action: #selector(showAbout), keyEquivalent: "")
         about.target = self
         appMenu.addItem(about)
         appMenu.addItem(updateMenuItem())
         appMenu.addItem(automaticChecksMenuItem())
         appMenu.addItem(.separator())
-        let hide = NSMenuItem(title: "Hide Clipboard History", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hide = NSMenuItem(title: "Hide The Clipboard", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         hide.target = NSApp
         appMenu.addItem(hide)
         let hideOthers = NSMenuItem(title: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
@@ -203,7 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         showAll.target = NSApp
         appMenu.addItem(showAll)
         appMenu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit Clipboard History", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit The Clipboard", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
         appMenu.addItem(quit)
         let appMenuItem = NSMenuItem()
@@ -341,7 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         feedbackTimer?.invalidate()
         feedbackTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: false) { [weak self] _ in
             self?.statusItem.button?.title = ""
-            self?.statusItem.button?.toolTip = "Clipboard History · ⌥⌘V"
+            self?.statusItem.button?.toolTip = "The Clipboard · ⌥⌘V"
         }
     }
 }

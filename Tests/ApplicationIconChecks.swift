@@ -7,11 +7,11 @@ enum ApplicationIconChecks {
         _ = NSApplication.shared
         let previousImage = NSApp.applicationIconImage
         defer { NSApp.applicationIconImage = previousImage }
-        let suite = "com.iomz.ClipboardHistory.Test.Icons.\(UUID().uuidString)"
+        let suite = "com.iomz.TheClipboard.Test.Icons.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let app = Bundle(url: URL(fileURLWithPath: CommandLine.arguments[1]))!
-        let protectedURLs = ["Info.plist", "Resources/ClipboardHistory.icns", "Resources/Lagoon.icns", "_CodeSignature/CodeResources"]
+        let protectedURLs = ["Info.plist", "Resources/Dustlight.icns", "Resources/Lagoon.icns", "_CodeSignature/CodeResources"]
             .map { app.bundleURL.appendingPathComponent("Contents/\($0)") }
         let before = try protectedURLs.map { try Data(contentsOf: $0) }
         let dustlight = ApplicationIconController.loadImage(.dustlight, bundle: app)!
@@ -74,15 +74,15 @@ enum ApplicationIconChecks {
         precondition(unknown.selected == .dustlight)
         precondition(defaults.string(forKey: ApplicationIconController.preferenceKey) == "unknown")
 
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ClipboardHistory-icon-fixture-\(UUID().uuidString).app")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("TheClipboard-icon-fixture-\(UUID().uuidString).app")
         defer { try? FileManager.default.removeItem(at: root) }
         let resources = root.appendingPathComponent("Contents/Resources")
         try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
         let info: [String: Any] = ["CFBundleIdentifier": suite, "CFBundlePackageType": "APPL"]
         try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
             .write(to: root.appendingPathComponent("Contents/Info.plist"))
-        try FileManager.default.copyItem(at: app.url(forResource: "ClipboardHistory", withExtension: "icns")!,
-            to: resources.appendingPathComponent("ClipboardHistory.icns"))
+        try FileManager.default.copyItem(at: app.url(forResource: "Dustlight", withExtension: "icns")!,
+            to: resources.appendingPathComponent("Dustlight.icns"))
         let fixture = Bundle(url: root)!
         precondition(ApplicationIconController.loadImage(.lagoon, bundle: fixture) == nil)
         try Data("not an icon".utf8).write(to: resources.appendingPathComponent("Lagoon.icns"))

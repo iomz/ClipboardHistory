@@ -2,9 +2,9 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/Resources/Info.plist")
-DMG=${1:-"$ROOT/build/releases/$VERSION/ClipboardHistory-$VERSION-arm64.dmg"}
+DMG=${1:-"$ROOT/build/releases/TheClipboard/$VERSION/TheClipboard-$VERSION-arm64.dmg"}
 hdiutil verify "$DMG"
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/ClipboardHistory-inspect.XXXXXX")
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/TheClipboard-inspect.XXXXXX")
 MOUNTED=false
 cleanup() {
   if [ "$MOUNTED" = true ]; then
@@ -21,15 +21,15 @@ hdiutil attach -readonly -nobrowse -mountpoint "$WORK/mount" "$DMG"
 MOUNTED=true
 diskutil info -plist "$WORK/mount" > "$WORK/volume.plist"
 test "$(/usr/libexec/PlistBuddy -c 'Print :WritableVolume' "$WORK/volume.plist")" = false
-test -d "$WORK/mount/Clipboard History.app"
+test -d "$WORK/mount/The Clipboard.app"
 test -L "$WORK/mount/Applications"
 test "$(readlink "$WORK/mount/Applications")" = /Applications
 # hdiutil may add standard hidden filesystem metadata, but nothing else.
-find "$WORK/mount" -mindepth 1 -maxdepth 1 ! -name 'Clipboard History.app' \
+find "$WORK/mount" -mindepth 1 -maxdepth 1 ! -name 'The Clipboard.app' \
   ! -name Applications ! -name '.HFS+ Private Directory Data*' \
   ! -name '.fseventsd' ! -name '.Trashes' ! -name '.DS_Store' \
   ! -name '.VolumeIcon.icns' > "$WORK/unexpected.txt"
 test ! -s "$WORK/unexpected.txt"
-"$ROOT/Scripts/test-distribution.sh" "$WORK/mount/Clipboard History.app"
-"$ROOT/Scripts/test-icon.sh" "$WORK/mount/Clipboard History.app"
+"$ROOT/Scripts/test-distribution.sh" "$WORK/mount/The Clipboard.app"
+"$ROOT/Scripts/test-icon.sh" "$WORK/mount/The Clipboard.app"
 echo "DMG is read-only; app and Applications symlink verified; no extra payloads."

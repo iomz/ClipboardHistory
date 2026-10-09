@@ -7,7 +7,7 @@ private func fingerprint() -> Data {
 
 private final class IconLaunchProbe: NSObject, NSApplicationDelegate {
     private var controller: ApplicationIconController!
-    private let suite = "com.iomz.ClipboardHistory.Test.IconLaunch.\(UUID().uuidString)"
+    private let suite = "com.iomz.TheClipboard.Test.IconLaunch.\(UUID().uuidString)"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let defaults = UserDefaults(suiteName: suite)!

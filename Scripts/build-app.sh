@@ -3,7 +3,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
-APP="$ROOT/build/releases/$VERSION/Clipboard History.app"
+APP="$ROOT/build/releases/TheClipboard/$VERSION/The Clipboard.app"
 if [ -e "$APP" ]; then
   echo "Refusing to overwrite $APP. Move the previous candidate aside first." >&2
   exit 1
@@ -13,13 +13,13 @@ FRAMEWORK="$ROOT/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm6
 test -d "$FRAMEWORK"
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Resources/Info.plist)
 mkdir -p "$APP/Contents/MacOS"
-cp .build/arm64-apple-macosx/release/ClipboardHistory "$APP/Contents/MacOS/ClipboardHistory"
+cp .build/arm64-apple-macosx/release/TheClipboard "$APP/Contents/MacOS/TheClipboard"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 mkdir -p "$APP/Contents/Frameworks"
 ditto "$FRAMEWORK" "$APP/Contents/Frameworks/Sparkle.framework"
 mkdir -p "$APP/Contents/Resources"
 cp "$ROOT/.build/artifacts/sparkle/Sparkle/LICENSE" "$APP/Contents/Resources/Sparkle-LICENSE.txt"
-"$ROOT/Scripts/generate-icon.sh" "$APP/Contents/Resources/ClipboardHistory.icns"
+"$ROOT/Scripts/generate-icon.sh" "$APP/Contents/Resources/Dustlight.icns"
 "$ROOT/Scripts/generate-icon.sh" "$APP/Contents/Resources/Lagoon.icns" Lagoon
 
 # Prefer a stable local Apple Development identity when one is unambiguous.
@@ -27,13 +27,13 @@ cp "$ROOT/.build/artifacts/sparkle/Sparkle/LICENSE" "$APP/Contents/Resources/Spa
 IDENTITIES=$(security find-identity -v -p codesigning 2>/dev/null || true)
 APPLE_DEV_HASHES=$(printf '%s\n' "$IDENTITIES" | awk '/^[[:space:]]*[0-9]+\)/ && /"Apple Development:/ {print tolower($2)}')
 IDENTITY_COUNT=$(printf '%s\n' "$APPLE_DEV_HASHES" | awk 'NF {count++} END {print count+0}')
-SELECTED_IDENTITY=${CLIPHISTORY_SIGNING_IDENTITY:-}
+SELECTED_IDENTITY=${THECLIPBOARD_SIGNING_IDENTITY:-}
 
 if [ -n "$SELECTED_IDENTITY" ]; then
   SELECTED_IDENTITY=$(printf '%s' "$SELECTED_IDENTITY" | tr '[:upper:]' '[:lower:]')
   MATCH_COUNT=$(printf '%s\n' "$APPLE_DEV_HASHES" | awk -v selected="$SELECTED_IDENTITY" '$0 == selected {count++} END {print count+0}')
   if [ "$MATCH_COUNT" -ne 1 ]; then
-    echo "CLIPHISTORY_SIGNING_IDENTITY must match exactly one installed Apple Development identity." >&2
+    echo "THECLIPBOARD_SIGNING_IDENTITY must match exactly one installed Apple Development identity." >&2
     exit 1
   fi
   SIGNING_IDENTITY="$SELECTED_IDENTITY"
@@ -46,7 +46,7 @@ elif [ "$IDENTITY_COUNT" -eq 0 ]; then
   echo "No Apple Development identity found; explicitly using ad-hoc signing."
 else
   echo "Multiple Apple Development identities found; refusing ambiguous selection." >&2
-  echo "Set CLIPHISTORY_SIGNING_IDENTITY to the intended local identity SHA-1." >&2
+  echo "Set THECLIPBOARD_SIGNING_IDENTITY to the intended local identity SHA-1." >&2
   exit 1
 fi
 

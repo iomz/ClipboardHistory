@@ -7,12 +7,12 @@
 DerivedData/
 /build/
 
-# Reverse-engineering source material and legacy binary; keep local, never commit
-/Clipboard History.app/
+# Local application bundles and research scratch files; never commit
+/*.app/
 /docs/
 
 # Local app state, diagnostics, and disposable fixtures
-/ClipboardHistory/Entries/
+/TheClipboard/Entries/
 /runtime-data/
 /logs/
 *.log

@@ -55,7 +55,7 @@ public final class GlobalHotkey {
 }
 
 public enum PasteCommand {
-    private static let logger = Logger(subsystem: "com.iomz.ClipboardHistory", category: "Paste")
+    private static let logger = Logger(subsystem: "com.iomz.TheClipboard", category: "Paste")
 
     /// Request event-synthesizing authorization while picker is still active,
     /// before destination activation/focus handoff begins.

@@ -36,6 +36,7 @@ enum CoreChecks {
     }
 
     static func checkCanonicalIdentity() throws {
+        try require(ClipboardEntry.identity(for: []) == "f6b24789b5140055cf7a0bf0474375c5698300b7a33ebea950637e22b54fc872", "TheClipboard canonical-v1 domain tag")
         let text = ClipboardRepresentation(typeIdentifier: "public.utf8-plain-text", data: Data("hello".utf8))
         let rtf = ClipboardRepresentation(typeIdentifier: "public.rtf", data: Data("{\\rtf1 hello}".utf8))
         let sameItem = ClipboardPasteboardItem(ordinal: 0, representations: [text, rtf])
@@ -50,7 +51,7 @@ enum CoreChecks {
 
     static func checkDuplicatePromotion() throws {
         let store = MemoryStore()
-        let history = ClipboardHistory(store: store)
+        let history = ClipboardLibrary(store: store)
         let firstDate = Date(timeIntervalSince1970: 100)
         let original = entry("same", source: "First")
         _ = try history.capture(original, at: firstDate)
@@ -90,7 +91,7 @@ enum CoreChecks {
 
     static func checkSharedFavoriteDeleteAndSearch() throws {
         let store = MemoryStore()
-        let history = ClipboardHistory(store: store)
+        let history = ClipboardLibrary(store: store)
         let older = entry("older marker", source: "First")
         let newer = entry("newest marker", source: "Second")
         _ = try history.capture(older, at: Date(timeIntervalSince1970: 10))

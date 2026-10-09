@@ -5,7 +5,7 @@ import Foundation
 /// Persistent browsing/management surface. Shares repository and search semantics
 /// with PickerWindowController; this window never synthesizes a paste command.
 public final class HistoryManagerWindowController: NSWindowController, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
-    private let history: ClipboardHistory
+    private let history: ClipboardLibrary
     private let capture: PasteboardCapture
     private let onFeedback: (String) -> Void
     private let onWindowVisibilityChanged: (Bool) -> Void
@@ -35,7 +35,7 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
     }()
 
     public init(
-        history: ClipboardHistory,
+        history: ClipboardLibrary,
         capture: PasteboardCapture,
         onFeedback: @escaping (String) -> Void,
         onWindowVisibilityChanged: @escaping (Bool) -> Void
@@ -49,14 +49,14 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false
         )
-        window.title = "Clipboard History"
+        window.title = "The Clipboard"
         window.minSize = NSSize(width: 760, height: 480)
         window.center()
         super.init(window: window)
         window.delegate = self
         configureContent()
         historyObserver = NotificationCenter.default.addObserver(
-            forName: .clipboardHistoryDidChange, object: history, queue: .main
+            forName: .clipboardLibraryDidChange, object: history, queue: .main
         ) { [weak self] _ in self?.reloadEntries(preservingSelection: true) }
         reloadEntries()
     }
@@ -85,7 +85,7 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
         // NSWindow owns and sizes its content view. Keep its autoresizing
         // relationship to the window; only constrain the content's children.
 
-        searchField.placeholderString = "Search all clipboard history"
+        searchField.placeholderString = "Search all saved clips"
         searchField.delegate = self
         searchField.translatesAutoresizingMaskIntoConstraints = false
         searchField.widthAnchor.constraint(greaterThanOrEqualToConstant: 280).isActive = true
@@ -304,7 +304,7 @@ public final class HistoryManagerWindowController: NSWindowController, NSWindowD
         entries = scopeControl.selectedSegment == 1 ? searched.filter(\.isFavorite) : searched
         tableView.reloadData()
         emptyLabel.stringValue = history.allEntries().isEmpty
-            ? "Your clipboard history will appear here."
+            ? "Your saved clips will appear here."
             : (scopeControl.selectedSegment == 1 && searchField.stringValue.isEmpty ? "No favorite items yet." : "No items match your search.")
         emptyLabel.isHidden = !entries.isEmpty
         if let previousID, let index = entries.firstIndex(where: { $0.id == previousID }) {

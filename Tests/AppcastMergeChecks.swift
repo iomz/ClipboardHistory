@@ -4,7 +4,7 @@ import Foundation
 // publishable fake release. All fixtures are removed when this process exits.
 let tool = CommandLine.arguments[1]
 let feed = URL(fileURLWithPath: CommandLine.arguments[2])
-let work = FileManager.default.temporaryDirectory.appendingPathComponent("ClipboardHistory-merge-tests-\(UUID().uuidString)")
+let work = FileManager.default.temporaryDirectory.appendingPathComponent("TheClipboard-merge-tests-\(UUID().uuidString)")
 try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
 defer { try? FileManager.default.removeItem(at: work) }
 

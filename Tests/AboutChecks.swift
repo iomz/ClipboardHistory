@@ -3,7 +3,7 @@ import AppKit
 @main
 struct AboutChecks {
     static func main() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ClipboardHistory-about-tests-\(UUID().uuidString)")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("TheClipboard-about-tests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 

@@ -26,8 +26,8 @@ enum RepresentationChecks {
         let html = Data("<html><body><b>\(rtfText)</b></body></html>".utf8)
         let plain = Data(rtfText.utf8)
         let url = Data("https://example.test/synthetic?item=1".utf8)
-        let fileA = Data(URL(fileURLWithPath: "/tmp/ClipboardHistory-fixture-A.txt").absoluteString.utf8)
-        let fileB = Data(URL(fileURLWithPath: "/tmp/ClipboardHistory-fixture-B.png").absoluteString.utf8)
+        let fileA = Data(URL(fileURLWithPath: "/tmp/TheClipboard-fixture-A.txt").absoluteString.utf8)
+        let fileB = Data(URL(fileURLWithPath: "/tmp/TheClipboard-fixture-B.png").absoluteString.utf8)
 
         return [
             Fixture(name: "plain UTF-8", items: [[rep("public.utf8-plain-text", plain)]], expectedLabel: "TXT"),
@@ -46,12 +46,12 @@ enum RepresentationChecks {
     }
 
     private static func roundTrip(_ fixture: Fixture) throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ClipboardHistory-RepresentationTest-\(UUID().uuidString)", isDirectory: true)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("TheClipboard-RepresentationTest-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let store = try FileEntryStore(root: root)
-        let history = ClipboardHistory(store: store)
-        let sourceBoard = NSPasteboard(name: NSPasteboard.Name("com.iomz.ClipboardHistory.Test.Source.\(UUID().uuidString)"))
-        let targetBoard = NSPasteboard(name: NSPasteboard.Name("com.iomz.ClipboardHistory.Test.Target.\(UUID().uuidString)"))
+        let history = ClipboardLibrary(store: store)
+        let sourceBoard = NSPasteboard(name: NSPasteboard.Name("com.iomz.TheClipboard.Test.Source.\(UUID().uuidString)"))
+        let targetBoard = NSPasteboard(name: NSPasteboard.Name("com.iomz.TheClipboard.Test.Target.\(UUID().uuidString)"))
         defer { sourceBoard.clearContents(); targetBoard.clearContents() }
         try write(fixture.items, to: sourceBoard)
 
@@ -100,7 +100,7 @@ enum RepresentationChecks {
     private static func testUnsupportedTypeIsReportedAndNotPersisted() throws {
         let marker = "SYNTHETIC-DIAGNOSTIC-MARKER-DO-NOT-PRINT"
         let item = [rep("public.utf8-plain-text", Data(marker.utf8)), rep("com.example.synthetic-opaque", Data("private synthetic payload".utf8))]
-        let board = NSPasteboard(name: NSPasteboard.Name("com.iomz.ClipboardHistory.Test.Unsupported.\(UUID().uuidString)"))
+        let board = NSPasteboard(name: NSPasteboard.Name("com.iomz.TheClipboard.Test.Unsupported.\(UUID().uuidString)"))
         defer { board.clearContents() }
         try write([item], to: board)
         guard let snapshot = PasteboardSnapshotter.capture(from: board) else { throw CheckFailure(message: "unsupported diagnostic fixture capture") }
@@ -121,8 +121,8 @@ enum RepresentationChecks {
     }
 
     private static func testPlainTextPasteDecisionAndRestore() throws {
-        let source = NSPasteboard(name: NSPasteboard.Name("com.iomz.ClipboardHistory.Test.PlainPaste.Source.\(UUID().uuidString)"))
-        let target = NSPasteboard(name: NSPasteboard.Name("com.iomz.ClipboardHistory.Test.PlainPaste.Target.\(UUID().uuidString)"))
+        let source = NSPasteboard(name: NSPasteboard.Name("com.iomz.TheClipboard.Test.PlainPaste.Source.\(UUID().uuidString)"))
+        let target = NSPasteboard(name: NSPasteboard.Name("com.iomz.TheClipboard.Test.PlainPaste.Target.\(UUID().uuidString)"))
         defer { source.clearContents(); target.clearContents() }
 
         let explicitText = "plain wins — 日本語 🐈"
@@ -140,14 +140,14 @@ enum RepresentationChecks {
         try require(restoredTypes.contains(NSPasteboard.PasteboardType.string.rawValue), "plain restore advertises standard string type")
         try require(restoredTypes.isDisjoint(with: ["public.rtf", "public.rtfd", "public.html", "public.png", "public.tiff"]), "plain restore drops rich and non-text representations")
 
-        let richOnly = NSPasteboard(name: NSPasteboard.Name("com.iomz.ClipboardHistory.Test.RichPlain.Source.\(UUID().uuidString)"))
+        let richOnly = NSPasteboard(name: NSPasteboard.Name("com.iomz.TheClipboard.Test.RichPlain.Source.\(UUID().uuidString)"))
         defer { richOnly.clearContents() }
         try write([[rep("public.html", Data("<p>derived text</p>".utf8))]], to: richOnly)
         let richSnapshot = PasteboardSnapshotter.capture(from: richOnly)
         let derived = PlainTextPastePolicy.text(from: richSnapshot)
         try require(derived == "derived text\n", "HTML-derived text follows existing AppKit normalization")
 
-        let imageOnly = NSPasteboard(name: NSPasteboard.Name("com.iomz.ClipboardHistory.Test.NonTextPlain.Source.\(UUID().uuidString)"))
+        let imageOnly = NSPasteboard(name: NSPasteboard.Name("com.iomz.TheClipboard.Test.NonTextPlain.Source.\(UUID().uuidString)"))
         defer { imageOnly.clearContents() }
         try write([[rep("public.png", imageData(type: .png))]], to: imageOnly)
         let originalTypes = Set((imageOnly.types ?? []).map(\.rawValue))
@@ -194,7 +194,7 @@ enum RepresentationChecks {
     }
 
     private static func capturedEntry(_ representations: [ClipboardRepresentation]) throws -> ClipboardEntry {
-        let board = NSPasteboard(name: NSPasteboard.Name("com.iomz.ClipboardHistory.Test.BadgePreview.\(UUID().uuidString)"))
+        let board = NSPasteboard(name: NSPasteboard.Name("com.iomz.TheClipboard.Test.BadgePreview.\(UUID().uuidString)"))
         defer { board.clearContents() }
         try write([representations], to: board)
         guard let snapshot = PasteboardSnapshotter.capture(from: board) else {

@@ -122,11 +122,11 @@ public enum PasteboardSnapshotter {
 
 public final class PasteboardCapture {
     private let pasteboard: NSPasteboard
-    private let history: ClipboardHistory
+    private let history: ClipboardLibrary
     private var timer: Timer?
     private var lastChangeCount: Int
 
-    public init(history: ClipboardHistory, pasteboard: NSPasteboard = .general) {
+    public init(history: ClipboardLibrary, pasteboard: NSPasteboard = .general) {
         self.history = history
         self.pasteboard = pasteboard
         self.lastChangeCount = pasteboard.changeCount

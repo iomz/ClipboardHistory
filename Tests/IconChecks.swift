@@ -45,8 +45,8 @@ for (name, size) in representations {
 if args.count > 3 {
     let app = URL(fileURLWithPath: args[3])
     let info = try PropertyListSerialization.propertyList(from: Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")), format: nil) as! [String: Any]
-    require(info["CFBundleIconFile"] as? String == "ClipboardHistory.icns", "Icon metadata missing")
-    let resource = design == "Dustlight" ? "ClipboardHistory" : "Lagoon"
+    require(info["CFBundleIconFile"] as? String == "Dustlight.icns", "Icon metadata missing")
+    let resource = design == "Dustlight" ? "Dustlight" : "Lagoon"
     let url = app.appendingPathComponent("Contents/Resources/\(resource).icns")
     let icon = NSImage(contentsOf: url)!
     require(icon.isValid, "AppKit cannot load icon")

@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 public extension Notification.Name {
-    static let clipboardHistoryDidChange = Notification.Name("ClipboardHistory.didChange")
+    static let clipboardLibraryDidChange = Notification.Name("TheClipboard.didChange")
 }
 
 public struct ClipboardRepresentation: Codable, Equatable, Sendable {
@@ -133,7 +133,7 @@ public struct ClipboardEntry: Codable, Equatable, Identifiable, Sendable {
     /// representation order within a group is canonicalized by lowercased type ID,
     /// then payload bytes. Derived text, timestamp, source, favorite, and UI data are excluded.
     public static func identity(for items: [ClipboardPasteboardItem]) -> String {
-        var bytes = Data("ClipboardHistory\0canonical-v1\0".utf8)
+        var bytes = Data("TheClipboard\0canonical-v1\0".utf8)
         append(UInt64(items.count), to: &bytes)
         for (index, item) in items.enumerated() {
             append(UInt64(index), to: &bytes)
@@ -177,7 +177,7 @@ public protocol ClipboardEntryStore: AnyObject {
     func remove(id: UUID) throws
 }
 
-public final class ClipboardHistory {
+public final class ClipboardLibrary {
     private let store: ClipboardEntryStore
     private let lock = NSLock()
     private var entries: [ClipboardEntry]
@@ -219,7 +219,7 @@ public final class ClipboardHistory {
             }
             entries.insert(promoted, at: 0)
             lock.unlock()
-            NotificationCenter.default.post(name: .clipboardHistoryDidChange, object: self)
+            NotificationCenter.default.post(name: .clipboardLibraryDidChange, object: self)
             return CaptureResult(entry: promoted, wasDuplicate: wasDuplicate)
         } catch {
             lock.unlock()
@@ -236,7 +236,7 @@ public final class ClipboardHistory {
             do { try store.upsert(entries[index]) }
             catch { entries[index] = old; throw error }
             lock.unlock()
-            NotificationCenter.default.post(name: .clipboardHistoryDidChange, object: self)
+            NotificationCenter.default.post(name: .clipboardLibraryDidChange, object: self)
         } catch {
             lock.unlock()
             throw error
@@ -250,7 +250,7 @@ public final class ClipboardHistory {
             try store.remove(id: id)
             entries.remove(at: index)
             lock.unlock()
-            NotificationCenter.default.post(name: .clipboardHistoryDidChange, object: self)
+            NotificationCenter.default.post(name: .clipboardLibraryDidChange, object: self)
         } catch {
             lock.unlock()
             throw error

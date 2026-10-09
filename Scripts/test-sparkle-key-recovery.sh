@@ -13,7 +13,7 @@ test "$(stat -f '%Lp' "$BACKUP")" = 600
 test "$(stat -f '%Lp' "$(dirname "$BACKUP")")" = 700
 TOOLS="$ROOT/.build/artifacts/sparkle/Sparkle/bin"
 SERVICE=https://sparkle-project.org
-ACCOUNT="com.iomz.ClipboardHistory.recovery-test.$(uuidgen)"
+ACCOUNT="com.iomz.TheClipboard.recovery-test.$(uuidgen)"
 umask 077
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/opencode-sparkle-recovery.XXXXXX")
 ARMED=false

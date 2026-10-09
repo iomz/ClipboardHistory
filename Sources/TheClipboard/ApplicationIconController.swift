@@ -5,7 +5,7 @@ enum ApplicationIcon: String, CaseIterable {
     case lagoon
 
     var title: String { self == .dustlight ? "Dustlight" : "Lagoon" }
-    var resourceName: String { self == .dustlight ? "ClipboardHistory" : "Lagoon" }
+    var resourceName: String { self == .dustlight ? "Dustlight" : "Lagoon" }
 }
 
 /// Only changes the running app's image. Never writes bundle/Finder metadata.

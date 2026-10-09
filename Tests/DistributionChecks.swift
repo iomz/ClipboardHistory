@@ -18,11 +18,14 @@ do {
     let source = try plist(args[1])
     let app = URL(fileURLWithPath: args[2], isDirectory: true)
     let bundled = try plist(app.appendingPathComponent("Contents/Info.plist").path)
-    for key in ["CFBundleIdentifier", "CFBundleName", "CFBundleExecutable", "CFBundleShortVersionString", "CFBundleVersion", "LSMinimumSystemVersion", "SUFeedURL", "SUPublicEDKey"] {
+    for key in ["CFBundleIdentifier", "CFBundleName", "CFBundleDisplayName", "CFBundleExecutable", "CFBundleShortVersionString", "CFBundleVersion", "LSMinimumSystemVersion", "SUFeedURL", "SUPublicEDKey"] {
         try require(bundled[key] as? String == source[key] as? String, "Bundle metadata mismatch: \(key)")
     }
-    try require(bundled["CFBundleIdentifier"] as? String == "com.iomz.ClipboardHistory", "Application identity changed")
-    try require(bundled["SUFeedURL"] as? String == "https://iomz.github.io/ClipboardHistory/appcast.xml", "Unexpected feed")
+    try require(bundled["CFBundleIdentifier"] as? String == "com.iomz.TheClipboard", "Wrong new application identity")
+    try require(bundled["CFBundleName"] as? String == "The Clipboard" && bundled["CFBundleDisplayName"] as? String == "The Clipboard", "Wrong application name")
+    try require(app.lastPathComponent == "The Clipboard.app", "Wrong application bundle filename")
+    try require(bundled["CFBundleExecutable"] as? String == "TheClipboard", "Wrong executable metadata")
+    try require(bundled["SUFeedURL"] as? String == "https://iomz.github.io/TheClipboard/appcast.xml", "Unexpected feed")
     try require(bundled["SUEnableAutomaticChecks"] == nil, "Native consent is suppressed by bundle automatic-check override")
     try require(bundled["SUScheduledCheckInterval"] as? Double == 86400, "Default check interval must be 24 hours")
     for key in ["SUAutomaticallyUpdate", "SUAllowsAutomaticUpdates"] {
@@ -39,13 +42,13 @@ do {
     try require(names == ["Info.plist", "MacOS", "Frameworks", "Resources", "_CodeSignature"], "Unexpected bundle contents (possible runtime data)")
     let executables = try FileManager.default.contentsOfDirectory(atPath: contents.appendingPathComponent("MacOS").path)
     let frameworks = try FileManager.default.contentsOfDirectory(atPath: contents.appendingPathComponent("Frameworks").path)
-    try require(executables == ["ClipboardHistory"], "Unexpected executables/secrets")
+    try require(executables == ["TheClipboard"], "Unexpected executables/secrets")
     try require(frameworks == ["Sparkle.framework"], "Unexpected frameworks/tools")
     let resources = try FileManager.default.contentsOfDirectory(atPath: contents.appendingPathComponent("Resources").path)
-    try require(Set(resources) == ["Sparkle-LICENSE.txt", "ClipboardHistory.icns", "Lagoon.icns"], "Unexpected resources/secrets")
-    try require(bundled["CFBundleIconFile"] as? String == "ClipboardHistory.icns", "Missing application icon metadata")
+    try require(Set(resources) == ["Sparkle-LICENSE.txt", "Dustlight.icns", "Lagoon.icns"], "Unexpected resources/secrets")
+    try require(bundled["CFBundleIconFile"] as? String == "Dustlight.icns", "Missing application icon metadata")
     try require(source["CFBundleIconFile"] as? String == bundled["CFBundleIconFile"] as? String, "Icon metadata mismatch")
-    let icon = try Data(contentsOf: contents.appendingPathComponent("Resources/ClipboardHistory.icns"))
+    let icon = try Data(contentsOf: contents.appendingPathComponent("Resources/Dustlight.icns"))
     try require(icon.prefix(4) == Data("icns".utf8) && icon.count > 8, "Invalid/missing application icon")
     let alternative = try Data(contentsOf: contents.appendingPathComponent("Resources/Lagoon.icns"))
     try require(alternative.prefix(4) == Data("icns".utf8) && alternative.count > 8, "Invalid/missing alternative icon")
@@ -73,8 +76,8 @@ do {
                 throw NSError(domain: "DistributionChecks", code: 4, userInfo: [NSLocalizedDescriptionKey: "Missing signed enclosure/version metadata"])
             }
             try require(versions.insert(version).inserted, "Duplicate build in appcast")
-            let filename = "ClipboardHistory-\(shortVersion)-arm64.dmg"
-            try require(urlString == "https://github.com/iomz/ClipboardHistory/releases/download/v\(shortVersion)/\(filename)", "Unexpected release URL")
+            let filename = "TheClipboard-\(shortVersion)-arm64.dmg"
+            try require(urlString == "https://github.com/iomz/TheClipboard/releases/download/v\(shortVersion)/\(filename)", "Unexpected release URL or legacy appcast")
             try require(url.lastPathComponent == filename, "Unexpected archive name")
             let archive = try Data(contentsOf: URL(fileURLWithPath: args[4]).appendingPathComponent(filename))
             try require(String(archive.count) == length, "Archive length mismatch")
