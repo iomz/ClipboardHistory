@@ -3,6 +3,7 @@ import Carbon
 import ClipboardCore
 import ClipboardPlatform
 import Foundation
+import Sparkle
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -14,6 +15,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pickerHotkey: GlobalHotkey?
     private var plainTextPasteHotkey: GlobalHotkey?
     private var feedbackTimer: Timer?
+    private var updaterController: SPUStandardUpdaterController!
+
+    private func configureUpdater() {
+        updaterController = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
+        // Enforce manual-only checks, even if an older preference enables them.
+        updaterController.updater.automaticallyChecksForUpdates = false
+        updaterController.updater.automaticallyDownloadsUpdates = false
+        updaterController.startUpdater()
+    }
+
+    private func updateMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Check for Updates…", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
+        item.target = updaterController
+        return item
+    }
+
+    // Launch/signing smoke check without reading the clipboard, opening history,
+    // registering shortcuts, sending network requests, or changing TCC.
+    func checkDistributionConfiguration() -> Bool {
+        configureUpdater()
+        configureStatusItem()
+        configureMainMenu()
+        let menus = [statusItem.menu, NSApp.mainMenu?.items.first?.submenu]
+        let about = NSApp.mainMenu?.items.first?.submenu?.items.first
+        let information = AboutInformation()
+        print("Running bundle: \(Bundle.main.bundleURL.path); version \(information.version), build \(information.build)")
+        return updaterController.updater.canCheckForUpdates
+            && about?.target === self
+            && about?.action == #selector(showAbout)
+            && information.version == Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            && information.build == Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+            && !updaterController.updater.automaticallyChecksForUpdates
+            && !updaterController.updater.automaticallyDownloadsUpdates
+            && menus.allSatisfy { menu in
+                menu?.items.contains { item in
+                    item.title == "Check for Updates…"
+                        && item.target === updaterController
+                        && item.action == #selector(SPUStandardUpdaterController.checkForUpdates(_:))
+                } == true
+            }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
@@ -30,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             history = ClipboardHistory(store: store)
             capture = PasteboardCapture(history: history)
             capture.start()
+            configureUpdater()
             configureStatusItem()
             configureMainMenu()
             picker = PickerWindowController(history: history, capture: capture) { [weak self] message in
@@ -84,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Clipboard History", action: #selector(quit), keyEquivalent: "q"))
         menu.items.forEach { $0.target = self }
+        menu.insertItem(updateMenuItem(), at: menu.items.count - 1)
         statusItem.menu = menu
     }
 
@@ -91,9 +135,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let mainMenu = NSMenu()
 
         let appMenu = NSMenu(title: "Clipboard History")
-        let about = NSMenuItem(title: "About Clipboard History", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
-        about.target = NSApp
+        let about = NSMenuItem(title: "About Clipboard History", action: #selector(showAbout), keyEquivalent: "")
+        about.target = self
         appMenu.addItem(about)
+        appMenu.addItem(updateMenuItem())
         appMenu.addItem(.separator())
         let hide = NSMenuItem(title: "Hide Clipboard History", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         hide.target = NSApp
@@ -153,6 +198,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openHistoryManagerFromMainMenu() { historyManager.showManager() }
+
+    @objc private func showAbout() {
+        NSApp.orderFrontStandardAboutPanel(options: AboutInformation().panelOptions)
+    }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 

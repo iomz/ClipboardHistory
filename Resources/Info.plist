@@ -7,8 +7,14 @@
 	<key>CFBundleIdentifier</key><string>com.iomz.ClipboardHistory</string>
 	<key>CFBundleName</key><string>Clipboard History</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
-	<key>CFBundleShortVersionString</key><string>0.2.0</string>
-	<key>CFBundleVersion</key><string>2</string>
+	<key>CFBundleShortVersionString</key><string>0.3.0</string>
+	<key>CFBundleVersion</key><string>3</string>
+	<key>SUFeedURL</key><string>https://iomz.github.io/ClipboardHistory/appcast.xml</string>
+	<key>SUPublicEDKey</key><string>k8/hIcoKO/Gy4CFjz2lxXWEgCj3ZBJUcytQd37puKHY=</string>
+	<key>SUEnableAutomaticChecks</key><false/>
+	<key>SUAutomaticallyUpdate</key><false/>
+	<key>SUAllowsAutomaticUpdates</key><false/>
+	<key>SUVerifyUpdateBeforeExtraction</key><true/>
 	<key>LSMinimumSystemVersion</key><string>26.0</string>
 	<key>LSUIElement</key><true/>
 	<key>NSHighResolutionCapable</key><true/>
