@@ -31,4 +31,5 @@ find "$WORK/mount" -mindepth 1 -maxdepth 1 ! -name 'Clipboard History.app' \
   ! -name '.VolumeIcon.icns' > "$WORK/unexpected.txt"
 test ! -s "$WORK/unexpected.txt"
 "$ROOT/Scripts/test-distribution.sh" "$WORK/mount/Clipboard History.app"
+"$ROOT/Scripts/test-icon.sh" "$WORK/mount/Clipboard History.app"
 echo "DMG is read-only; app and Applications symlink verified; no extra payloads."

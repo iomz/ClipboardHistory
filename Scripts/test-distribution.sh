@@ -18,5 +18,5 @@ swiftc "$ROOT/Tests/DistributionChecks.swift" -o "$ROOT/build/tests/distribution
 # This explicit diagnostic exits before capture, history, hotkeys or event loop.
 # Argument-domain overrides are non-persistent and do not change installed app
 # preferences. Test both choices without starting the run loop/network schedule.
-"$APP/Contents/MacOS/ClipboardHistory" --distribution-check -SUEnableAutomaticChecks NO -SUScheduledCheckInterval 86400
-"$APP/Contents/MacOS/ClipboardHistory" --distribution-check -SUEnableAutomaticChecks YES -SUScheduledCheckInterval 86400
+"$APP/Contents/MacOS/ClipboardHistory" --distribution-check -SUEnableAutomaticChecks NO -SUScheduledCheckInterval 86400 -ApplicationIconSelection dustlight
+"$APP/Contents/MacOS/ClipboardHistory" --distribution-check -SUEnableAutomaticChecks YES -SUScheduledCheckInterval 86400 -ApplicationIconSelection lagoon

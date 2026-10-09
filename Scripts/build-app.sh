@@ -19,6 +19,8 @@ mkdir -p "$APP/Contents/Frameworks"
 ditto "$FRAMEWORK" "$APP/Contents/Frameworks/Sparkle.framework"
 mkdir -p "$APP/Contents/Resources"
 cp "$ROOT/.build/artifacts/sparkle/Sparkle/LICENSE" "$APP/Contents/Resources/Sparkle-LICENSE.txt"
+"$ROOT/Scripts/generate-icon.sh" "$APP/Contents/Resources/ClipboardHistory.icns"
+"$ROOT/Scripts/generate-icon.sh" "$APP/Contents/Resources/Lagoon.icns" Lagoon
 
 # Prefer a stable local Apple Development identity when one is unambiguous.
 # An optional local selector accepts only its SHA-1 identity hash; never commit it.

@@ -29,7 +29,7 @@ Current facts to preserve:
 
 `Scripts/build-app.sh` builds the Release arm64 `.app` for macOS 26 and assembles `build/releases/<version>/Clipboard History.app`. It refuses an existing output, preserving the running v0.2.0 app at `build/Clipboard History.app`. Move an obsolete candidate aside explicitly before rebuilding; never move/delete a running or accepted installation. This Command Line Tools-only setup needs SwiftPM's deprecated native build backend; the script selects it. The manifest requires Swift tools 6.0 and uses Swift 5 language mode. v0.3.0 was validated with Apple Swift 6.4 on macOS 27.0.1. Run `Scripts/test-core.sh` and `Scripts/test-representations.sh`. Representation tests use unique named pasteboards, temporary stores, synthetic fixtures, and exact byte comparison. They never read `NSPasteboard.general`.
 
-Product version follows Semantic Versioning in `CFBundleShortVersionString`; `CFBundleVersion` is an independent incrementing macOS build number. Current candidate is 0.3.1 (build 4); publicly released baseline remains 0.3.0/build 3 until publication approval. `Resources/Info.plist` is the only product version source. Sparkle compares build numbers, not SemVer labels. Increment the build for every published update. Never replace a published DMG with different bytes under the same version/URL.
+Product version follows Semantic Versioning in `CFBundleShortVersionString`; `CFBundleVersion` is an independent incrementing macOS build number. Current candidate is 0.4.0 (build 5); publicly released baseline remains 0.3.1/build 4 until publication approval. `Resources/Info.plist` is the only product version source. Sparkle compares build numbers, not SemVer labels. Increment the build for every published update. Never replace a published DMG with different bytes under the same version/URL.
 
 Ordinary launch opens History Manager. A future background/login launcher may pass `--background` to start capture silently; no login item is configured. When already running, AppKit reopen events show the existing Manager instance.
 
@@ -42,6 +42,43 @@ The app status menu includes **Clipboard Representation Report…**. For manual 
 5. Use Option-Command-V and Enter to restore into a safe target. Run the report again to compare restored types. Confirm actual image/file paste in the target app; a badge alone is not evidence of fidelity.
 
 For an image item advertising both a file URL and image data, report shows `MIX`; do not reinterpret it as FILE or IMG without reviewing source representation evidence with iomz.
+
+## v0.4.0 dual application icons
+
+Approved masters are `Resources/Artwork/Dustlight.png` (default) and `Resources/Artwork/Lagoon.png` (alternative), copied byte-for-byte from owner's corresponding `~/Desktop/ClipboardHistory-transparent-{dustlight,lagoon}.png`. Both are 1254×1254, 8-bit RGB with alpha, no embedded ICC profile, decoded as sRGB. SHA-256: Dustlight `9b1d66498f16d2ee08b80ed2ad7edc46cd0a1641d66f3d4e37d0f51051751465`; Lagoon `e9da133c0943fc1f35537d3b14eb99a684f36d0cd2e81a609b1700dba8b44885`. Source, enlarged-edge and 1024/256/64/32/16 composited inspections show smooth edges without serious visible halos/artifacts on black/white/gray. At 16px clipboard silhouette survives, but individual lines/details are naturally limited. Fully transparent pixel counts: Dustlight 595,088; Lagoon 596,329. Faint exterior alpha residue remains accepted. Do not threshold alpha, remove more background, regenerate artwork or alter either master. Superseded single-icon artwork/candidates were moved into ignored validation archives, not discarded.
+
+`Scripts/generate-icon.swift` interprets the approved master explicitly as sRGB, resizes through CoreGraphics high-quality interpolation with premultiplied alpha and writes sRGB-tagged PNG representations. Required resizing from 1254 pixels, 8-bit quantization and alpha premultiplication/unpremultiplication can affect generated pixels; master remains unchanged. Standard iconset names cover 16, 32, 128, 256 and 512 logical sizes at 1×/2×, including 64 and 1024 pixel representations. `Scripts/generate-icon.sh` calls Apple's `iconutil` to produce `.icns`, refuses an existing output and cleans temporary iconsets. No third-party dependencies. Repeat generation on the current SDK produces identical bytes; future OS/SDK resamplers may differ.
+
+`Scripts/build-app.sh` generates `Contents/Resources/ClipboardHistory.icns` from Dustlight and `Lagoon.icns` from Lagoon before signing. `Scripts/generate-icon.sh OUTPUT [Dustlight|Lagoon]` defaults to Dustlight. `CFBundleIconFile = ClipboardHistory.icns` always exposes Dustlight to Finder and the app inside the DMG. No custom DMG volume artwork is added. Only masters are retained in source; `.icns`, iconsets, previews and candidates remain under ignored `build/` or temporary directories.
+
+`ApplicationIconController` owns one status-menu submenu, **Application Icon → Dustlight / Lagoon**, with checked active item. It loads bundled icons once and assigns `NSApplication.applicationIconImage` through one common application path, without restarting or writing bundle/Finder metadata. Initialization and runtime selection apply immediately; launch completion, activation-policy transitions and `applicationDidBecomeActive` request a coalesced main-queue reapplication after the current lifecycle callback. The callback reads the latest selection, never an old captured image, and does not write preferences or start update checks. No arbitrary delays, polling, cache resets or artwork changes. `ApplicationIconSelection` stores raw `dustlight`/`lagoon` in UserDefaults only on explicit selection. Startup restores valid choice; unset/unknown choice defaults to Dustlight with no preference write. Missing/corrupt Lagoon disables its item and falls back to Dustlight while preserving saved choice for a repaired build. About receives selected image explicitly whenever opened. Menu-bar SF Symbol, global shortcuts, history, updater settings, entitlements and permissions are unchanged.
+
+Startup HAT reported a gray-framed bundled Dustlight at launch even with Lagoon saved, while subsequent menu switching rendered both correctly. Read-only inspection found production choice `lagoon`; candidate/release binary hashes matched. Original isolated AppKit launch probe restored both choices and retained identical `applicationIconImage` fingerprints before/after the accessory→regular transition and next queue turn. Thus preference decoding, source pixels and an in-process AppKit-image reset were not established as causes. The implementation gap was applying only before Manager/Dock activation, without a lifecycle reassertion; correction covers late startup/policy publishers. Exact Dock-server caching/frame behavior cannot be proven by image fingerprints; owner subsequently confirmed visual fix PASS.
+
+Dock and Command-Tab can reflect the running icon when macOS exposes the app, but UI caching and accessory activation policy affect visibility. Existing Manager-open policy makes app regular; closing Manager returns accessory mode. Finder/DMG stay Dustlight regardless of selection. Reopen About after switching if already visible. Sparkle 2.10.0 `SUApplicationInfo.bestIconForHost` reads `NSImageNameApplicationIcon` for the main bundle, falling back to Workspace. Therefore standard Sparkle UI may use selected Lagoon rather than Dustlight; no reliable independent icon override is introduced. Do not mutate Sparkle internals or temporarily change runtime icon to force a dialog appearance. Command-Tab and actual Sparkle-dialog visual acceptance remain pending.
+
+`Scripts/test-icon.sh` regenerates both designs twice, compares bytes to each bundled icon, round-trips all ten representations per design through `iconutil`, and runs `Tests/IconChecks.swift`: master hash/dimensions/alpha, embedded sRGB profile, each representation's dimensions/alpha/transparent corners, primary metadata and AppKit/Workspace lookup. `Scripts/test-application-icons.sh` covers default selection, native applicationIconImage change, actual menu action/checkmarks, isolated UserDefaults persistence/restore, unknown preference, and missing/corrupt Lagoon fallback. Lifecycle regression tests cover fresh/Dustlight/Lagoon startup, coalescing, simulated late overwrites and queued-callback/runtime-choice races. A unique-defaults fixture application also runs the real AppKit event loop/activation-policy transition and proves deferred image restoration by fingerprint. It can transiently register its own Dock entry but has no Manager, history, hotkeys or updater; it never changes production defaults, TCC or installations. These are not Dock visual tests. Fixture key recovery is not repeated without an owner-supplied backup; production signing challenge/public-key equality is reverified.
+
+### v0.4.0 isolated icon HAT (accepted)
+
+Owner confirmed PASS: default Dustlight, runtime Lagoon/Dustlight switching, immediate Dock updates, selected About icon and menu checkmark, both choices persisting across relaunch, startup gray-frame resolution, Finder Dustlight, unchanged menu-bar icon and existing clipboard functionality. Owner authorized committing implementation, not pushing or publishing v0.4.0. Command-Tab and Sparkle update-dialog visual results remain unconfirmed. Checklist below preserves the accepted procedure.
+
+Writable candidate is prepared at `build/hat/0.4.0/Clipboard History.app`; DMG is `build/releases/0.4.0/ClipboardHistory-0.4.0-arm64.dmg`. Do not drag DMG app onto Applications. Owner should quit other copies before launching candidate; no tool replaces, quits or relaunches installed v0.3.1. A separate test account avoids sharing production Sparkle preferences/TCC. Disposable history directory isolates entries, not same-account preferences.
+
+1. Inspect candidate and app inside mounted DMG in Finder icon view and Get Info: both must show Dustlight. Use extracted PNGs under `build/validation/dual-icons-v0.4.0/{dustlight,lagoon}/ClipboardHistory.iconset`: `icon_512x512@2x.png` (1024), `icon_256x256.png` (256), `icon_32x32@2x.png` (64), `icon_32x32.png` (32), `icon_16x16.png` (16). Compare light/dark backgrounds, corners, halos and small-size legibility. Comparison sheets live beside iconsets; panels ordered black, white, mid-gray.
+2. Launch exact candidate, without modifying installed app:
+
+   ```sh
+   CLIPHISTORY_SUPPORT_DIRECTORY="$PWD/build/hat/0.4.0/support" \
+     "$PWD/build/hat/0.4.0/Clipboard History.app/Contents/MacOS/ClipboardHistory"
+   ```
+
+3. With fresh test-account preferences, About must show **0.4.0/build 5** and Dustlight. Status menu contains exactly one Application Icon submenu, with only Dustlight checked. Keep History Manager open to expose Dock and Command-Tab; missing entries after closing Manager are expected accessory behavior.
+4. Select Lagoon. Dock must switch immediately. Reopen About and inspect Lagoon; menu must check Lagoon only. Inspect Command-Tab separately and record its actual behavior, not an assumed PASS. Finder must still show Dustlight.
+5. Select Dustlight; Dock/About/checkmark must switch back. Quit/relaunch: clean Dustlight must appear with no gray frame, without first touching icon menu. Select Lagoon, quit/relaunch again: clean Lagoon/checkmark must restore, with no gray-framed Dustlight fallback. Repeat closing/reopening Manager and activating the app. Record startup result before any menu switching. Return to preferred choice. Test unset preference using a fresh test account, not by deleting production defaults. Do not pass `-ApplicationIconSelection` in visual persistence HAT because argument overrides mask saved choice.
+6. Inspect both designs on light/dark appearance and confirm menu-bar clipboard symbol unchanged. Verify normal capture/paste, existing shortcuts, favorite stars and automatic-check preference behavior. Do not reset/regrant production Accessibility to work around different-path candidate limitations; those are not definitive TCC-continuity tests.
+7. Optional manual Check for Updates exercises native Sparkle UI against unchanged public v0.3.1 feed. Candidate is newer; no actual newer-update offer is available. Record any icon shown in a no-update alert separately. **Sparkle's update-available dialog icon remains unverified until an actual update dialog displays it.** Do not change feed/version or publish a fake update to force that test.
+8. Quit candidate and report visual HAT. Installed v0.3.1, public feed and signing keys must stay unchanged. No commit, tag, push, Release, upload or Pages publication until explicit authorization.
 
 ## Development signing / Accessibility TCC
 
@@ -192,25 +229,27 @@ Scripts/test-about.sh
 Scripts/test-interactions.sh # includes representation checks
 Scripts/test-updater.sh
 Scripts/build-app.sh
-Scripts/compare-signatures.sh "/Applications/Clipboard History.app" "build/releases/0.3.1/Clipboard History.app"
+Scripts/test-icon.sh
+Scripts/test-application-icons.sh
+Scripts/compare-signatures.sh "/Applications/Clipboard History.app" "build/releases/0.4.0/Clipboard History.app"
 Scripts/test-distribution.sh
 Scripts/package-dmg.sh
 Scripts/test-dmg.sh
-Scripts/generate-appcast.sh build/releases/0.3.0/appcast.xml
+Scripts/generate-appcast.sh build/releases/0.3.1/appcast.xml
 Scripts/prepare-pages.sh
-swift Tests/AppcastMergeChecks.swift Scripts/merge-appcast.swift build/releases/0.3.1/appcast.xml
+swift Tests/AppcastMergeChecks.swift Scripts/merge-appcast.swift build/releases/0.4.0/appcast.xml
 git diff --check
 ```
 
-For v0.3.1 the signature comparison baseline is the accepted v0.3.0 app in `/Applications` (verify metadata before assuming its version). v0.3.0 originally compared against the retained v0.2.0 app at `build/Clipboard History.app`. Compare before changing installations. Designated requirement equality supports identity continuity but does not prove TCC authorization; actual paste after the OTA update is the definitive human test. Never overwrite/relaunch the installed baseline during candidate preparation.
+For v0.4.0 the signature comparison baseline is the installed v0.3.1 app in `/Applications` (verify metadata before assuming its version). v0.3.1 compared against v0.3.0; v0.3.0 originally compared against the retained v0.2.0 app at `build/Clipboard History.app`. Compare before changing installations. Designated requirement equality supports identity continuity but does not prove TCC authorization; actual paste after the OTA update is the definitive human test. Never overwrite/relaunch the installed baseline during candidate preparation.
 
-`package-dmg.sh` builds the default candidate if absent, or consumes one optional app path. It verifies signature, arm64 binary, framework, metadata and menu startup, stages only the app plus an `/Applications` symlink, and uses native `hdiutil` to produce compressed read-only UDZO. Filename is deterministic; filesystem timestamps/signatures/DMG bytes are not promised bit-for-bit reproducible. No artwork, third-party packaging tool, Developer ID or notarization. Output:
+`package-dmg.sh` builds the default candidate if absent, or consumes one optional app path. It verifies signature, arm64 binary, framework, metadata and menu startup, stages only the app plus an `/Applications` symlink, and uses native `hdiutil` to produce compressed read-only UDZO. Filename is deterministic; filesystem timestamps/signatures/DMG bytes are not promised bit-for-bit reproducible. No DMG background artwork, third-party packaging tool, Developer ID or notarization. Output:
 
 ```
-build/releases/0.3.1/ClipboardHistory-0.3.1-arm64.dmg
-build/releases/0.3.1/appcast.xml
-build/pages/0.3.1/appcast.xml
-build/pages/0.3.1/.nojekyll
+build/releases/0.4.0/ClipboardHistory-0.4.0-arm64.dmg
+build/releases/0.4.0/appcast.xml
+build/pages/0.4.0/appcast.xml
+build/pages/0.4.0/.nojekyll
 ```
 
 All build/package/feed/Pages preparation commands refuse existing final outputs rather than silently overwrite. Temporary staging directories are removed after use. `test-dmg.sh` mounts read-only, verifies payload and signatures, then ejects. Distribution checks use an outer-bundle allowlist: no clipboard store, private-key files or Sparkle signing tools are copied into the app/DMG. SwiftPM caches and all prepared artifacts remain untracked under `.build/` and `build/`.
@@ -220,8 +259,8 @@ All build/package/feed/Pages preparation commands refuse existing final outputs 
 For a subsequent release, retain earlier DMGs in `build/update-archives/` and pass the previous published feed explicitly:
 
 ```sh
-# After updating Info.plist to 0.3.1/build 4 and building/packaging it:
-Scripts/generate-appcast.sh build/releases/0.3.0/appcast.xml
+# After updating Info.plist to 0.4.0/build 5 and building/packaging it:
+Scripts/generate-appcast.sh build/releases/0.3.1/appcast.xml
 Scripts/prepare-pages.sh
 ```
 

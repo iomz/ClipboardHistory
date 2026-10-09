@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     private var plainTextPasteHotkey: GlobalHotkey?
     private var feedbackTimer: Timer?
     private var updaterController: SPUStandardUpdaterController!
+    private var iconController: ApplicationIconController!
 
     private func configureUpdater() {
         // Sparkle owns consent, persisted preferences and scheduling. Do not
@@ -61,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     // Launch/signing smoke check without reading the clipboard, opening history,
     // registering shortcuts, sending network requests, or changing TCC.
     func checkDistributionConfiguration() -> Bool {
+        iconController = ApplicationIconController()
         configureUpdater()
         configureStatusItem()
         configureMainMenu()
@@ -70,8 +72,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let expectedInterval = (UserDefaults.standard.object(forKey: "SUScheduledCheckInterval") as? NSNumber)?.doubleValue
             ?? (Bundle.main.object(forInfoDictionaryKey: "SUScheduledCheckInterval") as? NSNumber)?.doubleValue
         print("Running bundle: \(Bundle.main.bundleURL.path); version \(information.version), build \(information.build)")
+        print("Application icon: \(iconController.selected.title)")
         print("Automatic checks: \(updaterController.updater.automaticallyChecksForUpdates); interval: \(updaterController.updater.updateCheckInterval); background downloads: \(updaterController.updater.automaticallyDownloadsUpdates)")
-        return updaterController.updater.canCheckForUpdates
+        return statusItem.menu?.items.filter { $0.title == "Application Icon" }.count == 1
+            && iconController.menu.items.count == 2
+            && iconController.menu.items.filter { $0.state == .on }.count == 1
+            && iconController.selected.rawValue == (UserDefaults.standard.string(forKey: ApplicationIconController.preferenceKey) ?? "dustlight")
+            && iconController.selectedImage != nil
+            && updaterController.updater.canCheckForUpdates
             && about?.target === self
             && about?.action == #selector(showAbout)
             && information.version == Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
@@ -91,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        iconController = ApplicationIconController()
         do {
             let support: URL
             if let testDirectory = ProcessInfo.processInfo.environment["CLIPHISTORY_SUPPORT_DIRECTORY"] {
@@ -135,6 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             if !ProcessInfo.processInfo.arguments.contains("--background") {
                 historyManager.showManager()
             }
+            iconController.scheduleReapplication()
         } catch {
             NSApp.terminate(nil)
         }
@@ -143,6 +153,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         historyManager.showManager()
         return true
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        iconController?.scheduleReapplication()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -164,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         menu.items.forEach { $0.target = self }
         menu.insertItem(updateMenuItem(), at: menu.items.count - 1)
         menu.insertItem(automaticChecksMenuItem(), at: menu.items.count - 1)
+        menu.insertItem(iconController.menuItem(), at: menu.items.count - 1)
         statusItem.menu = menu
     }
 
@@ -237,7 +252,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     @objc private func openHistoryManagerFromMainMenu() { historyManager.showManager() }
 
     @objc private func showAbout() {
-        NSApp.orderFrontStandardAboutPanel(options: AboutInformation().panelOptions)
+        var options = AboutInformation().panelOptions
+        if let image = iconController.selectedImage { options[.applicationIcon] = image }
+        NSApp.orderFrontStandardAboutPanel(options: options)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -315,6 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let policy: NSApplication.ActivationPolicy = managerIsOpen ? .regular : .accessory
         guard NSApp.activationPolicy() != policy else { return }
         _ = NSApp.setActivationPolicy(policy)
+        iconController?.scheduleReapplication()
     }
 
     private func showFeedback(_ message: String) {
